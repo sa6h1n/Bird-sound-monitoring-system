@@ -5,132 +5,137 @@ const resultsEl = document.getElementById("results");
 const canvas = document.getElementById("waveform");
 const ctx = canvas.getContext("2d");
 
-let mediaRecorder, audioCtx, analyser, dataArray;
-let chunks = [];
-let timer, timeLeft = 10;
+const API_URL = "https://sa6h1n-bird-sound-monitor.hf.space/analyze";
 
-// 🔹 Convert WebM → WAV (browser-side)
-async function webmToWav(webmBlob) {
-  const arrayBuffer = await webmBlob.arrayBuffer();
-  const audioCtx = new AudioContext();
-  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+let mediaRecorder;
+let audioStream;
+let audioCtx;
+let analyser;
+let dataArray;
+let animationId;
+let timer;
+let timeLeft = 10;
 
-  const wavBuffer = audioBufferToWav(audioBuffer);
-  return new Blob([wavBuffer], { type: "audio/wav" });
-}
-
-function audioBufferToWav(buffer) {
-  const numOfChan = buffer.numberOfChannels;
-  const length = buffer.length * numOfChan * 2 + 44;
-  const bufferArray = new ArrayBuffer(length);
-  const view = new DataView(bufferArray);
-  let offset = 0;
-
-  function writeString(str) {
-    for (let i = 0; i < str.length; i++) {
-      view.setUint8(offset++, str.charCodeAt(i));
-    }
-  }
-
-  writeString("RIFF");
-  view.setUint32(offset, length - 8, true); offset += 4;
-  writeString("WAVE");
-  writeString("fmt ");
-  view.setUint32(offset, 16, true); offset += 4;
-  view.setUint16(offset, 1, true); offset += 2;
-  view.setUint16(offset, numOfChan, true); offset += 2;
-  view.setUint32(offset, buffer.sampleRate, true); offset += 4;
-  view.setUint32(offset, buffer.sampleRate * 2 * numOfChan, true); offset += 4;
-  view.setUint16(offset, numOfChan * 2, true); offset += 2;
-  view.setUint16(offset, 16, true); offset += 2;
-  writeString("data");
-  view.setUint32(offset, length - offset - 4, true); offset += 4;
-
-  for (let i = 0; i < buffer.length; i++) {
-    for (let ch = 0; ch < numOfChan; ch++) {
-      let sample = buffer.getChannelData(ch)[i];
-      sample = Math.max(-1, Math.min(1, sample));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-      offset += 2;
-    }
-  }
-  return bufferArray;
-}
-
-// 🔹 Waveform
+/* ------------------ WAVEFORM ------------------ */
 function drawWave() {
-  requestAnimationFrame(drawWave);
+  if (!analyser) return;
+
+  animationId = requestAnimationFrame(drawWave);
   analyser.getByteTimeDomainData(dataArray);
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.beginPath();
-  let slice = canvas.width / dataArray.length;
+
+  const sliceWidth = canvas.width / dataArray.length;
   let x = 0;
+
   for (let i = 0; i < dataArray.length; i++) {
-    let y = (dataArray[i] / 128) * canvas.height / 2;
+    const v = dataArray[i] / 128.0;
+    const y = (v * canvas.height) / 2;
+
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    x += slice;
+    x += sliceWidth;
   }
+
   ctx.strokeStyle = "#60a5fa";
+  ctx.lineWidth = 2;
   ctx.stroke();
 }
 
-// 🎙️ Record
+/* ------------------ RECORD ------------------ */
 recordBtn.onclick = async () => {
-  chunks = [];
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  resultsEl.innerHTML = "";
+  statusEl.textContent = "🎙 Preparing microphone…";
 
-  audioCtx = new AudioContext();
-  analyser = audioCtx.createAnalyser();
-  audioCtx.createMediaStreamSource(stream).connect(analyser);
-  analyser.fftSize = 2048;
-  dataArray = new Uint8Array(analyser.fftSize);
-
-  mediaRecorder = new MediaRecorder(stream);
-  mediaRecorder.ondataavailable = e => chunks.push(e.data);
-  mediaRecorder.start();
-
-  drawWave();
   recordBtn.disabled = true;
   stopBtn.disabled = false;
 
+  audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+
+  const source = audioCtx.createMediaStreamSource(audioStream);
+  source.connect(analyser);
+  dataArray = new Uint8Array(analyser.fftSize);
+
+  mediaRecorder = new MediaRecorder(audioStream);
+  const chunks = [];
+
+  mediaRecorder.ondataavailable = e => chunks.push(e.data);
+  mediaRecorder.start();
+
   timeLeft = 10;
-  statusEl.textContent = `Recording… ${timeLeft}s`;
+  statusEl.textContent = `🎙 Recording… ${timeLeft}s`;
+  drawWave();
+
   timer = setInterval(() => {
     timeLeft--;
-    statusEl.textContent = `Recording… ${timeLeft}s`;
-    if (timeLeft <= 0) stopBtn.click();
+    statusEl.textContent = `🎙 Recording… ${timeLeft}s`;
+    if (timeLeft <= 0) stopRecording();
   }, 1000);
 
-  stopBtn.onclick = async () => {
+  stopBtn.onclick = stopRecording;
+
+  async function stopRecording() {
     clearInterval(timer);
-    mediaRecorder.stop();
-    stream.getTracks().forEach(t => t.stop());
-    recordBtn.disabled = false;
+    cancelAnimationFrame(animationId);
+
     stopBtn.disabled = true;
-    statusEl.textContent = "Analyzing…";
+    statusEl.textContent = "🤖 Analyzing with AI…";
+
+    mediaRecorder.stop();
+    audioStream.getTracks().forEach(t => t.stop());
+    await audioCtx.close();
 
     mediaRecorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: "audio/wav" });
+      const formData = new FormData();
+      formData.append("file", blob, "recording.wav");
+
       try {
-        const webmBlob = new Blob(chunks, { type: "audio/webm" });
-        const wavBlob = await webmToWav(webmBlob);
+        recordBtn.disabled = true;
+        recordBtn.textContent = "Analyzing…";
 
-        const fd = new FormData();
-        fd.append("file", wavBlob, "recording.wav");
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: formData
+        });
 
-        const res = await fetch(
-          "https://sa6h1n-bird-sound-monitor.hf.space/analyze",
-          { method: "POST", body: fd }
-        );
-
-        if (!res.ok) throw new Error("Backend error");
+        if (!res.ok) throw new Error("Server error");
 
         const data = await res.json();
-        resultsEl.innerHTML = JSON.stringify(data, null, 2);
+        showResults(data.predictions);
         statusEl.textContent = "Analysis complete";
+
       } catch (err) {
-        statusEl.textContent = "Analysis failed. Please try again.";
         console.error(err);
+        statusEl.textContent = "Analysis failed. Please try again.";
       }
+
+      recordBtn.disabled = false;
+      recordBtn.textContent = "🎙 Record";
     };
-  };
+  }
 };
+
+/* ------------------ RESULTS ------------------ */
+function showResults(predictions) {
+  resultsEl.innerHTML = "";
+
+  predictions.forEach((p, i) => {
+    const conf = Math.round(p.confidence * 100);
+
+    resultsEl.innerHTML += `
+      <div class="result-card">
+        <div class="rank">#${i + 1}</div>
+        <h3>${p.bird}</h3>
+        <div class="confidence-bar">
+          <div class="confidence-fill" style="width:${conf}%"></div>
+        </div>
+        <small>${conf}% confidence</small>
+      </div>
+    `;
+  });
+}
