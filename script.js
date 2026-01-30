@@ -5,74 +5,79 @@ const resultsEl = document.getElementById("results");
 const canvas = document.getElementById("waveform");
 const ctx = canvas.getContext("2d");
 
-const API_URL = "https://sa6h1n-bird-sound-monitor.hf.space/analyze";
+let mediaRecorder, micStream;
+let audioCtx, analyser, dataArray;
+let timer, timeLeft = 10;
+let analyzingInterval;
+let animationFrame;
 
-let mediaRecorder;
-let audioStream;
-let audioCtx;
-let analyser;
-let dataArray;
-let animationId;
-let timer;
-let timeLeft = 10;
-
-/* ------------------ WAVEFORM ------------------ */
+// ------------------ WAVEFORM ------------------
 function drawWave() {
   if (!analyser) return;
-
-  animationId = requestAnimationFrame(drawWave);
   analyser.getByteTimeDomainData(dataArray);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.beginPath();
 
-  const sliceWidth = canvas.width / dataArray.length;
+  const slice = canvas.width / dataArray.length;
   let x = 0;
 
   for (let i = 0; i < dataArray.length; i++) {
-    const v = dataArray[i] / 128.0;
-    const y = (v * canvas.height) / 2;
-
+    const y = (dataArray[i] / 128) * (canvas.height / 2);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    x += sliceWidth;
+    x += slice;
   }
 
   ctx.strokeStyle = "#60a5fa";
   ctx.lineWidth = 2;
   ctx.stroke();
+
+  animationFrame = requestAnimationFrame(drawWave);
 }
 
-/* ------------------ RECORD ------------------ */
+// ------------------ ANALYZING ANIMATION ------------------
+function startAnalyzingAnimation() {
+  let dots = 0;
+  analyzingInterval = setInterval(() => {
+    dots = (dots + 1) % 4;
+    statusEl.textContent = "Analyzing" + ".".repeat(dots);
+  }, 400);
+}
+
+function stopAnalyzingAnimation() {
+  clearInterval(analyzingInterval);
+}
+
+// ------------------ RECORD ------------------
 recordBtn.onclick = async () => {
   resultsEl.innerHTML = "";
-  statusEl.textContent = "🎙 Preparing microphone…";
+  statusEl.textContent = "Preparing mic…";
 
-  recordBtn.disabled = true;
-  stopBtn.disabled = false;
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-  audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx = new AudioContext();
   analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 2048;
+  audioCtx.createMediaStreamSource(micStream).connect(analyser);
 
-  const source = audioCtx.createMediaStreamSource(audioStream);
-  source.connect(analyser);
+  analyser.fftSize = 2048;
   dataArray = new Uint8Array(analyser.fftSize);
 
-  mediaRecorder = new MediaRecorder(audioStream);
+  mediaRecorder = new MediaRecorder(micStream);
   const chunks = [];
 
   mediaRecorder.ondataavailable = e => chunks.push(e.data);
   mediaRecorder.start();
 
+  recordBtn.disabled = true;
+  stopBtn.disabled = false;
+
   timeLeft = 10;
-  statusEl.textContent = `🎙 Recording… ${timeLeft}s`;
+  statusEl.textContent = `Recording… ${timeLeft}s`;
   drawWave();
 
   timer = setInterval(() => {
     timeLeft--;
-    statusEl.textContent = `🎙 Recording… ${timeLeft}s`;
+    statusEl.textContent = `Recording… ${timeLeft}s`;
     if (timeLeft <= 0) stopRecording();
   }, 1000);
 
@@ -80,62 +85,58 @@ recordBtn.onclick = async () => {
 
   async function stopRecording() {
     clearInterval(timer);
-    cancelAnimationFrame(animationId);
+    cancelAnimationFrame(animationFrame);
 
     stopBtn.disabled = true;
-    statusEl.textContent = "🤖 Analyzing with AI…";
-
+    micStream.getTracks().forEach(t => t.stop());
     mediaRecorder.stop();
-    audioStream.getTracks().forEach(t => t.stop());
     await audioCtx.close();
 
     mediaRecorder.onstop = async () => {
-      const blob = new Blob(chunks, { type: "audio/wav" });
-      const formData = new FormData();
-      formData.append("file", blob, "recording.wav");
+      // UI update BEFORE fetch
+      statusEl.textContent = "Analyzing";
+      startAnalyzingAnimation();
+
+      const blob = new Blob(chunks, { type: "audio/webm" });
+      const fd = new FormData();
+      fd.append("file", blob, "recording.webm");
 
       try {
-        recordBtn.disabled = true;
-        recordBtn.textContent = "Analyzing…";
+        // let UI paint
+        await new Promise(r => setTimeout(r, 100));
 
-        const res = await fetch(API_URL, {
-          method: "POST",
-          body: formData
-        });
+        const res = await fetch(
+          "https://sa6h1n-bird-sound-monitor.hf.space/analyze",
+          { method: "POST", body: fd }
+        );
 
-        if (!res.ok) throw new Error("Server error");
+        if (!res.ok) throw new Error("API error");
 
         const data = await res.json();
-        showResults(data.predictions);
-        statusEl.textContent = "Analysis complete";
+
+        stopAnalyzingAnimation();
+        statusEl.textContent = "✅ Analysis complete";
+
+        resultsEl.innerHTML = "";
+        data.predictions.forEach((p, i) => {
+          const conf = Math.round(p.confidence * 100);
+          resultsEl.innerHTML += `
+            <div class="result-card">
+              <div class="rank">#${i + 1}</div>
+              <h3>${p.bird}</h3>
+              <div class="confidence-bar">
+                <div class="confidence-fill" style="width:${conf}%"></div>
+              </div>
+              <small>${conf}% confidence</small>
+            </div>`;
+        });
 
       } catch (err) {
-        console.error(err);
-        statusEl.textContent = "Analysis failed. Please try again.";
+        stopAnalyzingAnimation();
+        statusEl.textContent = "❌ Analysis failed. Please try again.";
       }
 
       recordBtn.disabled = false;
-      recordBtn.textContent = "🎙 Record";
     };
   }
 };
-
-/* ------------------ RESULTS ------------------ */
-function showResults(predictions) {
-  resultsEl.innerHTML = "";
-
-  predictions.forEach((p, i) => {
-    const conf = Math.round(p.confidence * 100);
-
-    resultsEl.innerHTML += `
-      <div class="result-card">
-        <div class="rank">#${i + 1}</div>
-        <h3>${p.bird}</h3>
-        <div class="confidence-bar">
-          <div class="confidence-fill" style="width:${conf}%"></div>
-        </div>
-        <small>${conf}% confidence</small>
-      </div>
-    `;
-  });
-}
