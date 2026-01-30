@@ -5,15 +5,36 @@ const resultsEl = document.getElementById("results");
 const canvas = document.getElementById("waveform");
 const ctx = canvas.getContext("2d");
 
-let mediaRecorder, micStream;
-let audioCtx, analyser, dataArray;
-let timer, timeLeft = 10;
-let analyzingInterval;
-let animationFrame;
+let mediaRecorder;
+let stream;
+let analyser;
+let audioCtx;
+let dataArray;
+let timer;
+let timeLeft = 10;
+let isRecording = false;
+let isAnalyzing = false;
 
-// ------------------ WAVEFORM ------------------
+/* ================= IMAGE FETCH ================= */
+async function getBirdImage(name) {
+  try {
+    const res = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(
+        name
+      )}`
+    );
+    const data = await res.json();
+    return data.thumbnail?.source || null;
+  } catch {
+    return null;
+  }
+}
+
+/* ================= WAVEFORM ================= */
 function drawWave() {
-  if (!analyser) return;
+  if (!analyser || !isRecording) return;
+
+  requestAnimationFrame(drawWave);
   analyser.getByteTimeDomainData(dataArray);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -31,112 +52,108 @@ function drawWave() {
   ctx.strokeStyle = "#60a5fa";
   ctx.lineWidth = 2;
   ctx.stroke();
-
-  animationFrame = requestAnimationFrame(drawWave);
 }
 
-// ------------------ ANALYZING ANIMATION ------------------
-function startAnalyzingAnimation() {
-  let dots = 0;
-  analyzingInterval = setInterval(() => {
-    dots = (dots + 1) % 4;
-    statusEl.textContent = "Analyzing" + ".".repeat(dots);
-  }, 400);
-}
-
-function stopAnalyzingAnimation() {
-  clearInterval(analyzingInterval);
-}
-
-// ------------------ RECORD ------------------
+/* ================= RECORD ================= */
 recordBtn.onclick = async () => {
-  resultsEl.innerHTML = "";
-  statusEl.textContent = "Preparing mic…";
+  if (isAnalyzing) return;
 
-  micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   audioCtx = new AudioContext();
   analyser = audioCtx.createAnalyser();
-  audioCtx.createMediaStreamSource(micStream).connect(analyser);
+  audioCtx.createMediaStreamSource(stream).connect(analyser);
 
   analyser.fftSize = 2048;
   dataArray = new Uint8Array(analyser.fftSize);
 
-  mediaRecorder = new MediaRecorder(micStream);
+  mediaRecorder = new MediaRecorder(stream);
   const chunks = [];
 
   mediaRecorder.ondataavailable = e => chunks.push(e.data);
   mediaRecorder.start();
 
+  isRecording = true;
+  timeLeft = 10;
+
   recordBtn.disabled = true;
   stopBtn.disabled = false;
+  resultsEl.innerHTML = "";
+  statusEl.innerHTML = `🎙 Recording… ${timeLeft}s`;
 
-  timeLeft = 10;
-  statusEl.textContent = `Recording… ${timeLeft}s`;
   drawWave();
 
   timer = setInterval(() => {
     timeLeft--;
-    statusEl.textContent = `Recording… ${timeLeft}s`;
+    statusEl.innerHTML = `🎙 Recording… ${timeLeft}s`;
     if (timeLeft <= 0) stopRecording();
   }, 1000);
 
   stopBtn.onclick = stopRecording;
 
   async function stopRecording() {
-    clearInterval(timer);
-    cancelAnimationFrame(animationFrame);
+    if (!isRecording) return;
+    isRecording = false;
 
-    stopBtn.disabled = true;
-    micStream.getTracks().forEach(t => t.stop());
+    clearInterval(timer);
     mediaRecorder.stop();
+    stream.getTracks().forEach(t => t.stop());
     await audioCtx.close();
 
-    mediaRecorder.onstop = async () => {
-      // UI update BEFORE fetch
-      statusEl.textContent = "Analyzing";
-      startAnalyzingAnimation();
+    stopBtn.disabled = true;
+    statusEl.innerHTML = `<span class="ai-loading">🤖 Analyzing with AI…</span>`;
+    isAnalyzing = true;
 
-      const blob = new Blob(chunks, { type: "audio/webm" });
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: "audio/wav" });
       const fd = new FormData();
-      fd.append("file", blob, "recording.webm");
+      fd.append("file", blob, "recording.wav");
 
       try {
-        // let UI paint
-        await new Promise(r => setTimeout(r, 100));
-
         const res = await fetch(
           "https://sa6h1n-bird-sound-monitor.hf.space/analyze",
           { method: "POST", body: fd }
         );
 
-        if (!res.ok) throw new Error("API error");
-
         const data = await res.json();
-
-        stopAnalyzingAnimation();
-        statusEl.textContent = "✅ Analysis complete";
-
-        resultsEl.innerHTML = "";
-        data.predictions.forEach((p, i) => {
-          const conf = Math.round(p.confidence * 100);
-          resultsEl.innerHTML += `
-            <div class="result-card">
-              <div class="rank">#${i + 1}</div>
-              <h3>${p.bird}</h3>
-              <div class="confidence-bar">
-                <div class="confidence-fill" style="width:${conf}%"></div>
-              </div>
-              <small>${conf}% confidence</small>
-            </div>`;
-        });
-
+        await renderResults(data.predictions);
+        statusEl.innerHTML = "✅ Analysis complete";
       } catch (err) {
-        stopAnalyzingAnimation();
-        statusEl.textContent = "❌ Analysis failed. Please try again.";
+        statusEl.innerHTML = "❌ Analysis failed. Try again.";
       }
 
       recordBtn.disabled = false;
+      isAnalyzing = false;
     };
   }
 };
+
+/* ================= RESULTS ================= */
+async function renderResults(predictions) {
+  resultsEl.innerHTML = "";
+
+  for (let i = 0; i < predictions.length; i++) {
+    const p = predictions[i];
+    const conf = Math.round(p.confidence * 100);
+    const img = await getBirdImage(p.bird);
+
+    resultsEl.innerHTML += `
+      <div class="result-card">
+        <div class="rank">#${i + 1}</div>
+
+        ${
+          img
+            ? `<img src="${img}" class="bird-img">`
+            : `<div class="no-img">No Image</div>`
+        }
+
+        <strong>${p.bird}</strong>
+
+        <div class="confidence-bar">
+          <div class="confidence-fill" style="width:${conf}%"></div>
+        </div>
+
+        <small>${conf}% confidence</small>
+      </div>
+    `;
+  }
+}
