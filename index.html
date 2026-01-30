@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bird sound monitoring system</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="container">
+  <h1>Bird sound monitoring system</h1>
+  <p class="subtitle">Record bird sounds using your laptop microphone</p>
+
+  <div class="controls">
+    <button id="recordBtn">🎙 Record</button>
+    <button id="stopBtn" disabled>⏹ Stop</button>
+  </div>
+
+  <canvas id="waveform" width="360" height="80"></canvas>
+  <div id="status">Idle</div>
+
+  <div id="results" class="results-grid"></div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
