@@ -74,7 +74,7 @@ recordBtn.onclick = async () => {
       const fd=new FormData();
       fd.append("file",blob,"recording.webm");
 
-      const res=await fetch("http://127.0.0.1:8000/analyze",{method:"POST",body:fd});
+      const res=await fetch("https://bird-sound-backend.onrender.com/analyze",{method:"POST",body:fd});
       const data=await res.json();
 
       resultsEl.innerHTML="";
