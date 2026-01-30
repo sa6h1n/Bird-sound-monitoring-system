@@ -5,7 +5,7 @@ const resultsEl = document.getElementById("results");
 const canvas = document.getElementById("waveform");
 const ctx = canvas.getContext("2d");
 
-const BACKEND_URL = "https://bird-sound-backend.onrender.com/analyze";
+const BACKEND_URL = "https://sa6h1n-bird-sound-monitor.hf.space/analyze";
 
 let mediaRecorder = null;
 let micStream = null;
