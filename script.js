@@ -2,150 +2,137 @@ const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
 const statusEl = document.getElementById("status");
 const resultsEl = document.getElementById("results");
-const canvas = document.getElementById("waveform");
-const ctx = canvas.getContext("2d");
+
+let mediaRecorder;
+let audioChunks = [];
 
 const API_URL = "https://sa6h1n-bird-sound-monitor.hf.space/analyze";
 
-let mediaRecorder;
-let micStream;
-let audioCtx;
-let analyser;
-let dataArray;
-let animationId;
-let timer;
-let timeLeft = 10;
+/* ---------- Browser detection ---------- */
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-function resetUI() {
-  cancelAnimationFrame(animationId);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  recordBtn.disabled = false;
-  stopBtn.disabled = true;
-}
-
-function drawWave() {
-  animationId = requestAnimationFrame(drawWave);
-  analyser.getByteTimeDomainData(dataArray);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.beginPath();
-  let slice = canvas.width / dataArray.length;
-  let x = 0;
-  for (let i = 0; i < dataArray.length; i++) {
-    let y = (dataArray[i] / 128) * canvas.height / 2;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    x += slice;
-  }
-  ctx.strokeStyle = "#60a5fa";
-  ctx.stroke();
-}
-
-async function getBirdImage(name) {
-  try {
-    const res = await fetch(
-      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`
-    );
-    const data = await res.json();
-    return (
-      data.thumbnail?.source ||
-      "https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg"
-    );
-  } catch {
-    return "https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg";
-  }
-}
-
+/* ---------- RECORD ---------- */
 recordBtn.onclick = async () => {
   resultsEl.innerHTML = "";
-  recordBtn.disabled = true;
-  stopBtn.disabled = false;
+  audioChunks = [];
+  statusEl.textContent = "🎙️ Recording...";
 
-  micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  audioCtx = new AudioContext();
-  analyser = audioCtx.createAnalyser();
-  audioCtx.createMediaStreamSource(micStream).connect(analyser);
-  analyser.fftSize = 2048;
-  dataArray = new Uint8Array(analyser.fftSize);
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-  mediaRecorder = new MediaRecorder(micStream);
-  let chunks = [];
+  const options = isSafari
+    ? { mimeType: "audio/mp4" }
+    : { mimeType: "audio/webm" };
 
-  mediaRecorder.ondataavailable = e => chunks.push(e.data);
+  mediaRecorder = new MediaRecorder(stream, options);
 
-  mediaRecorder.onstop = async () => {
-    try {
-      statusEl.textContent = "Analyzing birds (first run may take ~30s)…";
-
-      const blob = new Blob(chunks, { type: "audio/webm" });
-      const fd = new FormData();
-      fd.append("file", blob, "recording.webm");
-
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), 120000); // 2 min timeout
-
-      const res = await fetch(API_URL, {
-        method: "POST",
-        body: fd,
-        signal: controller.signal
-      });
-
-      if (!res.ok) throw new Error("Server error");
-
-      const data = await res.json();
-      resultsEl.innerHTML = "";
-
-      for (let i = 0; i < data.predictions.length; i++) {
-        const p = data.predictions[i];
-        const img = await getBirdImage(p.bird);
-        const conf = Math.round(p.confidence * 100);
-
-        resultsEl.innerHTML += `
-          <div class="result-card">
-            <div class="rank">#${i + 1}</div>
-            <img src="${img}">
-            <h3>${p.bird}</h3>
-            <div class="confidence-bar">
-              <div class="confidence-fill" style="width:${conf}%"></div>
-            </div>
-            <small>${conf}% confidence</small>
-          </div>`;
-      }
-
-      statusEl.textContent = "Analysis complete";
-    } catch (err) {
-      statusEl.textContent = "Analysis failed. Please try again.";
-    } finally {
-      resetUI();
-    }
+  mediaRecorder.ondataavailable = e => {
+    if (e.data.size > 0) audioChunks.push(e.data);
   };
 
   mediaRecorder.start();
-  drawWave();
+  recordBtn.disabled = true;
+  stopBtn.disabled = false;
 
-  timeLeft = 10;
-  statusEl.textContent = `🎙 Recording… ${timeLeft}s`;
-
-  timer = setInterval(() => {
-    timeLeft--;
-    statusEl.textContent = `🎙 Recording… ${timeLeft}s`;
-    if (timeLeft <= 0) stopRecording();
-  }, 1000);
+  setTimeout(() => stopRecording(stream), 10000);
+  stopBtn.onclick = () => stopRecording(stream);
 };
 
-stopBtn.onclick = stopRecording;
+function stopRecording(stream) {
+  if (!mediaRecorder || mediaRecorder.state === "inactive") return;
 
-function stopRecording() {
-  clearInterval(timer);
+  mediaRecorder.stop();
+  stream.getTracks().forEach(t => t.stop());
+  recordBtn.disabled = false;
   stopBtn.disabled = true;
 
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stop();
-  }
+  mediaRecorder.onstop = async () => {
+    try {
+      statusEl.textContent = "⏳ Processing audio...";
+      const blob = new Blob(audioChunks);
+      if (blob.size < 5000) throw new Error("Audio too small");
 
-  if (micStream) {
-    micStream.getTracks().forEach(t => t.stop());
-  }
+      const wavBlob = await convertToWav(blob);
+      await sendToBackend(wavBlob);
+    } catch (e) {
+      console.error(e);
+      statusEl.textContent = "Recording failed. Try again.";
+    }
+  };
+}
 
-  if (audioCtx) {
-    audioCtx.close();
+/* ---------- BACKEND ---------- */
+async function sendToBackend(wavBlob) {
+  try {
+    statusEl.textContent = "Analyzing (may take ~30 seconds)...";
+
+    const fd = new FormData();
+    fd.append("file", wavBlob, "recording.wav");
+
+    const res = await fetch(API_URL, {
+      method: "POST",
+      body: fd
+    });
+
+    if (!res.ok) throw new Error("Backend error");
+
+    const data = await res.json();
+    renderResults(data.predictions);
+    statusEl.textContent = "Analysis complete";
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Analysis failed. Please try again.";
   }
+}
+
+/* ---------- AUDIO CONVERSION ---------- */
+async function convertToWav(blob) {
+  const audioCtx = new AudioContext();
+  const buffer = await audioCtx.decodeAudioData(await blob.arrayBuffer());
+  return new Blob([audioBufferToWav(buffer)], { type: "audio/wav" });
+}
+
+function audioBufferToWav(buffer) {
+  const numCh = buffer.numberOfChannels;
+  const len = buffer.length * numCh * 2 + 44;
+  const ab = new ArrayBuffer(len);
+  const view = new DataView(ab);
+  let offset = 0;
+
+  const write = s => { for (let i = 0; i < s.length; i++) view.setUint8(offset++, s.charCodeAt(i)); };
+
+  write("RIFF");
+  view.setUint32(offset, len - 8, true); offset += 4;
+  write("WAVEfmt ");
+  view.setUint32(offset, 16, true); offset += 4;
+  view.setUint16(offset, 1, true); offset += 2;
+  view.setUint16(offset, numCh, true); offset += 2;
+  view.setUint32(offset, buffer.sampleRate, true); offset += 4;
+  view.setUint32(offset, buffer.sampleRate * numCh * 2, true); offset += 4;
+  view.setUint16(offset, numCh * 2, true); offset += 2;
+  view.setUint16(offset, 16, true); offset += 2;
+  write("data");
+  view.setUint32(offset, buffer.length * numCh * 2, true); offset += 4;
+
+  for (let i = 0; i < buffer.length; i++) {
+    for (let ch = 0; ch < numCh; ch++) {
+      view.setInt16(offset, buffer.getChannelData(ch)[i] * 0x7fff, true);
+      offset += 2;
+    }
+  }
+  return ab;
+}
+
+/* ---------- UI ---------- */
+function renderResults(preds) {
+  resultsEl.innerHTML = "";
+  preds.forEach((p, i) => {
+    resultsEl.innerHTML += `
+      <div class="result-card">
+        <strong>#${i + 1} ${p.bird}</strong>
+        <div class="bar">
+          <div class="fill" style="width:${p.confidence * 100}%"></div>
+        </div>
+        <small>${Math.round(p.confidence * 100)}%</small>
+      </div>`;
+  });
 }
