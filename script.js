@@ -17,6 +17,14 @@ const NON_BIRD_LABELS = [
   "engine"
 ];
 
+const SUPABASE_URL = "https://gmxjrqewownmvkxkhuuw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdteGpycWV3b3dubXZreGtodXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5Mjg3MTksImV4cCI6MjA4NTUwNDcxOX0.LQtcG8aNkyXbsODAjkFP6RqTUPxdNgTpmj9toDwAL-0";
+
+const { createClient } = supabase;
+const supabaseClient = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
 const API = "https://sa6h1n-bird-sound-monitor.hf.space/analyze";
 
 /* ------------------ Recording + Waveform ------------------ */
@@ -186,11 +194,12 @@ recorder.onstop = async () => {
         topPrediction.bird.toLowerCase().includes(label)
       )
     ) {
-      saveDetections([topPrediction]);
+      await saveDetections([topPrediction]);
     }
 
     // Refresh history & analytics
-    showHistory(currentHistoryRange);
+  updateBiodiversityScore([]);
+await showHistory(currentHistoryRange);
 
     // ✅ THIS WAS MISSING
     resetControls();
@@ -284,165 +293,113 @@ ${wiki.malayalam ? `<div class="mal-name">${wiki.malayalam}</div>` : ""}
     resultsEl.appendChild(card);
   }
 }
-const missingBirds = checkSpeciesDisappearance();
-
-if (missingBirds.length > 0) {
-  alert(
-    `⚠️ Species absence detected:\n${missingBirds.join(", ")}\n\nThis may indicate habitat disturbance or seasonal change.`
-  );
-}
 
 /* ================== HISTORY STORAGE ================== */
 
-function saveDetections(predictions) {
-  if (!predictions || predictions.length === 0) return;
+async function saveDetections(predictions) {
+  if (!predictions.length) return;
 
-  const history =
-    JSON.parse(localStorage.getItem("birdDetectionHistory")) || [];
+  const rows = predictions.map(p => ({
+    bird: p.bird,
+    confidence: p.confidence
+  }));
 
-  const now = Date.now();
+  const { data, error } = await supabaseClient
+    .from("detections")
+    .insert(rows)
+    .select();
 
-  predictions.forEach(p => {
-    history.push({
-      bird: p.bird,
-      confidence: p.confidence,
-      timestamp: now
-    });
-  });
-
-  localStorage.setItem("birdDetectionHistory", JSON.stringify(history));
-
-  // ✅ IMMEDIATELY UPDATE UI
- showHistory(currentHistoryRange);
-  renderCharts();
-  renderBiodiversityTrend();
-  updateBiodiversityScore();
+  if (error) {
+    console.error("INSERT FAILED:", error);
+  } else {
+    console.log("INSERT OK:", data);
+  }
 }
 
-/* ================== SHOW HISTORY ================== */
+async function fetchDetections(range = "week") {
+  let fromDate = new Date();
 
-function showHistory(range = currentHistoryRange) {
+  if (range === "day") fromDate.setDate(fromDate.getDate() - 1);
+  if (range === "week") fromDate.setDate(fromDate.getDate() - 7);
+  if (range === "month") fromDate.setDate(fromDate.getDate() - 30);
+
+  const { data, error } = await supabaseClient
+    .from("detections")
+    .select("*")
+    .gte("created_at", fromDate.toISOString())
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("FETCH FAILED:", error);
+    return [];
+  }
+
+  console.log("FETCH OK:", data);
+  return data;
+}
+
+async function showHistory(range = currentHistoryRange) {
   currentHistoryRange = range;
 
   const historyResults = document.getElementById("historyResults");
-  if (!historyResults) return;
+  historyResults.innerHTML = "<p>Loading...</p>";
+
+  const history = await fetchDetections(range);
+
+  if (!history.length) {
+    historyResults.innerHTML = "<p>No history available.</p>";
+    updateBiodiversityScore([]);
+    if (speciesChart) speciesChart.destroy();
+    if (biodiversityChart) biodiversityChart.destroy();
+    return;
+  }
 
   historyResults.innerHTML = "";
 
-  const history =
-    JSON.parse(localStorage.getItem("birdDetectionHistory")) || [];
-
-  if (history.length === 0) {
-    historyResults.innerHTML = "<p>No history available.</p>";
-    renderCharts([]);
-    renderBiodiversityTrend([]);
-    updateBiodiversityScore([]);
-    return;
-  }
-
-  const now = Date.now();
-  let rangeMs = 7 * 24 * 60 * 60 * 1000; // default week
-
-  if (range === "day") rangeMs = 24 * 60 * 60 * 1000;
-  if (range === "month") rangeMs = 30 * 24 * 60 * 60 * 1000;
-
-  const filtered = history.filter(
-    item => now - item.timestamp <= rangeMs
-  );
-
-  if (filtered.length === 0) {
-    historyResults.innerHTML = "<p>No detections in this period.</p>";
-    renderCharts([]);
-    renderBiodiversityTrend([]);
-    updateBiodiversityScore([]);
-    return;
-  }
-
-  // Group by bird
   const birdMap = {};
-  filtered.forEach(item => {
+  history.forEach(item => {
     birdMap[item.bird] = (birdMap[item.bird] || 0) + 1;
   });
 
   Object.entries(birdMap).forEach(([bird, count]) => {
     const div = document.createElement("div");
     div.className = "history-item";
-    div.innerHTML = `
-      <strong>${bird}</strong>
-      <span>Detected ${count} times</span>
-    `;
+    div.innerHTML = `<strong>${bird}</strong> <span>Detected ${count} times</span>`;
     historyResults.appendChild(div);
   });
 
-  // 🔑 ONE place to update everything
-  renderCharts(filtered);
-  renderBiodiversityTrend(filtered);
-  updateBiodiversityScore(filtered);
+  renderCharts(history);
+  renderBiodiversityTrend(history);
+  updateBiodiversityScore(history);
 }
 
 /* ================== CLEAR HISTORY ================== */
 
-function clearHistory() {
+async function clearHistory() {
   if (!confirm("Clear all bird detection history?")) return;
 
-  localStorage.removeItem("birdDetectionHistory");
+  const { error } = await supabaseClient
+    .from("detections")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
 
-  const historyResults = document.getElementById("historyResults");
-  if (historyResults) {
-    historyResults.innerHTML = "<p>History cleared.</p>";
+  if (error) {
+    console.error(error);
+    alert("Failed to clear history");
+    return;
   }
 
-  updateBiodiversityScore();
+  document.getElementById("historyResults").innerHTML =
+    "<p>History cleared.</p>";
 
   if (speciesChart) speciesChart.destroy();
   if (biodiversityChart) biodiversityChart.destroy();
-}
 
-/* ================== SPECIES DISAPPEARANCE ================== */
-
-function checkSpeciesDisappearance() {
-  const history =
-    JSON.parse(localStorage.getItem("birdDetectionHistory")) || [];
-
-  if (history.length === 0) return [];
-
-  const now = Date.now();
-  const DAY = 24 * 60 * 60 * 1000;
-
-  const recentWindow = 2 * DAY;
-  const pastWindow = 7 * DAY;
-
-  const birdsPast = new Set();
-  const birdsRecent = new Set();
-
-  history.forEach(item => {
-    if (now - item.timestamp <= pastWindow) birdsPast.add(item.bird);
-    if (now - item.timestamp <= recentWindow) birdsRecent.add(item.bird);
-  });
-
-  return [...birdsPast].filter(b => !birdsRecent.has(b));
+  updateBiodiversityScore([]);
 }
 
 /* ================== BIODIVERSITY SCORE ================== */
 
-function calculateBiodiversityScore() {
-  const history =
-    JSON.parse(localStorage.getItem("birdDetectionHistory")) || [];
-
-  if (history.length === 0) return 0;
-
-  const now = Date.now();
-  const WEEK = 7 * 24 * 60 * 60 * 1000;
-
-  const species = new Set(
-    history
-      .filter(item => now - item.timestamp <= WEEK)
-      .map(item => item.bird)
-  );
-
-  const Smax = 20; // baseline
-  return Math.min(100, Math.round((species.size / Smax) * 100));
-}
 
 function updateBiodiversityScore(filteredHistory = []) {
   const el = document.getElementById("biodiversityScore");
@@ -475,28 +432,25 @@ let speciesChart;
 let biodiversityChart;
 
 function renderCharts(filteredHistory = []) {
-  if (!filteredHistory.length) return;
+  if (!filteredHistory || filteredHistory.length === 0) return;
+
+  const canvas = document.getElementById("speciesChart");
+  if (!canvas) return;
 
   const counts = {};
   filteredHistory.forEach(h => {
     counts[h.bird] = (counts[h.bird] || 0) + 1;
   });
 
-  const labels = Object.keys(counts);
-  const values = Object.values(counts);
-
-  const canvas = document.getElementById("speciesChart");
-  if (!canvas) return;
-
   if (speciesChart) speciesChart.destroy();
 
   speciesChart = new Chart(canvas.getContext("2d"), {
     type: "bar",
     data: {
-      labels,
+      labels: Object.keys(counts),
       datasets: [{
         label: "Detections",
-        data: values,
+        data: Object.values(counts),
         backgroundColor: "#60a5fa"
       }]
     },
@@ -508,30 +462,27 @@ function renderCharts(filteredHistory = []) {
 }
 
 function renderBiodiversityTrend(filteredHistory = []) {
-  if (!filteredHistory.length) return;
-
-  const days = {};
-  filteredHistory.forEach(h => {
-    const d = new Date(h.timestamp).toDateString();
-    if (!days[d]) days[d] = new Set();
-    days[d].add(h.bird);
-  });
-
-  const labels = Object.keys(days);
-  const values = labels.map(d => days[d].size);
+  if (!filteredHistory || filteredHistory.length === 0) return;
 
   const canvas = document.getElementById("biodiversityTrendChart");
   if (!canvas) return;
+
+  const days = {};
+  filteredHistory.forEach(h => {
+    const d = new Date(h.created_at).toDateString();
+    if (!days[d]) days[d] = new Set();
+    days[d].add(h.bird);
+  });
 
   if (biodiversityChart) biodiversityChart.destroy();
 
   biodiversityChart = new Chart(canvas.getContext("2d"), {
     type: "line",
     data: {
-      labels,
+      labels: Object.keys(days),
       datasets: [{
         label: "Unique Species",
-        data: values,
+        data: Object.values(days).map(s => s.size),
         borderColor: "#22c55e",
         tension: 0.3
       }]
