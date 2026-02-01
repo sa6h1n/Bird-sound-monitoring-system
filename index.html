@@ -1,101 +1,494 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Bird Sound Environmental Monitor</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
+const recordBtn = document.getElementById("recordBtn");
+const stopBtn = document.getElementById("stopBtn");
+const statusEl = document.getElementById("status");
+const resultsEl = document.getElementById("results");
+const canvas = document.getElementById("waveform");
+const ctx = canvas.getContext("2d");
+const timerEl = document.getElementById("timer");
+const NON_BIRD_LABELS = [
+  "human",
+  "whistle",
+  "speech",
+  "noise",
+  "silence",
+  "insect",
+  "wind",
+  "rain",
+  "engine"
+];
 
-<div class="app">
-  <h1>Bird Sound Environmental Monitor</h1>
+const SUPABASE_URL = "https://gmxjrqewownmvkxkhuuw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdteGpycWV3b3dubXZreGtodXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5Mjg3MTksImV4cCI6MjA4NTUwNDcxOX0.LQtcG8aNkyXbsODAjkFP6RqTUPxdNgTpmj9toDwAL-0";
 
-  <div class="controls">
-    <button id="recordBtn">🎙 Record</button>
-    <button id="stopBtn" disabled>⏹ Stop</button>
-    <div id="timer" class="timer">10s</div>
-  </div>
+const { createClient } = supabase;
+const supabaseClient = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+const API = "https://sa6h1n-bird-sound-monitor.hf.space/analyze";
 
-  <canvas id="waveform"></canvas>
-  <div id="status" class="status">Ready</div>
+/* ------------------ Recording + Waveform ------------------ */
+let recorder, stream, audioCtx, analyser, dataArray;
+let countdownInterval;
+let timeLeft = 10;
 
-  <div id="results" class="results"></div>
-</div>
+let currentHistoryRange = "week"; // default
 
-<section class="dashboard">
+function resizeCanvas() {
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+}
 
-  <section class="history">
-    <h2>📁 Bird Detection History</h2>
- <p class="section-note">
-    Shows the most confident bird detected per recording.
-    Multiple predictions may occur, but only the dominant species is stored.
-  </p>
-    <div class="history-controls">
-      <button onclick="showHistory('day')">Today</button>
-      <button onclick="showHistory('week')">Last 7 Days</button>
-      <button onclick="showHistory('month')">Last 30 Days</button>
-      <button class="danger" onclick="clearHistory()">Clear All</button>
-    </div>
+function drawWave() {
+  if (!analyser) return;
+  requestAnimationFrame(drawWave);
 
-    <div id="historyResults" class="history-results">
-      <p>No history yet.</p>
-    </div>
-  </section>
+  analyser.getByteTimeDomainData(dataArray);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.beginPath();
 
-  <section class="analytics">
-    <h2>📊 Analytics</h2>
-  <p class="section-note">
-    Charts reflect dominant species per recording to avoid duplicate counts.
-     Biodiversity Score represents the number of unique bird species detected
-  in the past 7 days. Higher diversity indicates a healthier ecosystem.
-  </p>
-    <div id="biodiversityScore" class="biodiversity-score"></div>
+  const slice = canvas.width / dataArray.length;
+  let x = 0;
 
-    <canvas id="speciesChart"></canvas>
-    <canvas id="biodiversityTrendChart"></canvas>
-  </section>
+  for (let i = 0; i < dataArray.length; i++) {
+    const y = (dataArray[i] / 128) * canvas.height / 2;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    x += slice;
+  }
 
-</section>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="script.js"></script>
+  ctx.strokeStyle = "#60a5fa";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
 
-<footer class="project-footer">
-  <div class="footer-inner">
-    <h3>Project Overview</h3>
+/* ------------------ Wikipedia + Wikidata ------------------ */
+async function fetchWikiData(bird) {
+  try {
+    // Wikipedia summary
+    const wikiRes = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(bird)}`
+    );
+    const wiki = await wikiRes.json();
 
-    <div class="footer-columns">
-      <div>
-        <h4>Real-World Application</h4>
-        <p>
-          In real-world deployments, this system can be integrated with IoT
-          devices such as Raspberry Pi or ESP32 equipped with microphones and
-          placed in natural habitats. These devices continuously capture
-          environmental audio and transmit it for centralized analysis,
-          enabling long-term wildlife and ecosystem monitoring.
-        </p>
+    let scientific = "Not available";
+let iucn = "Not evaluated";
+let distribution = "Distribution information not available.";
+let malayalam = "";
+
+    // Wikidata lookup
+    if (wiki.wikibase_item) {
+      const wdRes = await fetch(
+        `https://www.wikidata.org/wiki/Special:EntityData/${wiki.wikibase_item}.json`
+      );
+      const wd = await wdRes.json();
+      const entity = wd.entities[wiki.wikibase_item];
+
+      // Scientific name (P225)
+      scientific =
+        entity?.claims?.P225?.[0]?.mainsnak?.datavalue?.value ||
+        scientific;
+
+      // IUCN status (P141)
+      const iucnMap = {
+        Q211005: "Least Concern",
+        Q211006: "Near Threatened",
+        Q211007: "Vulnerable",
+        Q211008: "Endangered",
+        Q211009: "Critically Endangered",
+        Q11394: "Extinct"
+      };
+
+      const iucnId =
+        entity?.claims?.P141?.[0]?.mainsnak?.datavalue?.value?.id;
+
+      if (iucnId && iucnMap[iucnId]) {
+        iucn = iucnMap[iucnId];
+      }
+      malayalam = entity?.labels?.ml?.value || "";
+    }
+
+    // Simple distribution extraction
+    if (wiki.extract) {
+      distribution = wiki.extract.split(".")[0] + ".";
+    }
+
+   return {
+  image: wiki.thumbnail?.source || "",
+  description: wiki.extract || "No description available.",
+  scientific,
+  iucn,
+  distribution,
+  malayalam
+};
+  } catch (err) {
+    return {
+      image: "",
+      description: "No description available.",
+      scientific: "Not available",
+      iucn: "Not evaluated",
+      distribution: "Distribution information not available."
+    };
+  }
+}
+
+/* ------------------ Record Button ------------------ */
+recordBtn.onclick = async () => {
+  resultsEl.innerHTML = "";
+  resizeCanvas();
+
+  statusEl.textContent = "Recording…";
+  recordBtn.disabled = true;
+  stopBtn.disabled = false;
+
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  audioCtx = new AudioContext();
+  analyser = audioCtx.createAnalyser();
+  audioCtx.createMediaStreamSource(stream).connect(analyser);
+
+  analyser.fftSize = 2048;
+  dataArray = new Uint8Array(analyser.fftSize);
+
+  recorder = new MediaRecorder(stream);
+  const chunks = [];
+
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.start();
+  drawWave();
+
+  timeLeft = 10;
+  timerEl.textContent = `${timeLeft}s`;
+
+ countdownInterval = setInterval(() => {
+  if (timeLeft <= 0) return;
+
+  timeLeft--;
+  timerEl.textContent = `${timeLeft}s`;
+
+  if (timeLeft === 0) {
+    stopRecording();
+  }
+}, 1000);
+
+  stopBtn.onclick = stopRecording;
+
+recorder.onstop = async () => {
+  statusEl.textContent = "Analyzing…";
+
+  try {
+    const blob = new Blob(chunks, { type: "audio/wav" });
+    const fd = new FormData();
+    fd.append("file", blob, "recording.wav");
+
+    const res = await fetch(API, { method: "POST", body: fd });
+    const data = await res.json();
+
+    // Show predictions
+    await renderResults(data.predictions);
+
+    // Store ONLY real birds
+    const topPrediction = getTopPrediction(data.predictions);
+    if (
+      topPrediction &&
+      topPrediction.confidence >= 0.3 &&
+      !NON_BIRD_LABELS.some(label =>
+        topPrediction.bird.toLowerCase().includes(label)
+      )
+    ) {
+      await saveDetections([topPrediction]);
+    }
+
+    // Refresh history & analytics
+  updateBiodiversityScore([]);
+await showHistory(currentHistoryRange);
+
+    // ✅ THIS WAS MISSING
+    resetControls();
+
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Analysis failed";
+    resetControls();
+  }
+}
+};
+function stopRecording() {
+  clearInterval(countdownInterval);
+  countdownInterval = null;
+
+  stopBtn.disabled = true;
+
+  if (recorder && recorder.state !== "inactive") {
+    recorder.stop();
+  }
+
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+  }
+
+  if (audioCtx) {
+    audioCtx.close();
+  }
+}
+function resetControls() {
+  recordBtn.disabled = false;
+  stopBtn.disabled = true;
+  statusEl.textContent = "Ready";
+  timerEl.textContent = "10 s";
+}
+/* ================== HELPERS ================== */
+
+function getTopPrediction(predictions) {
+  if (!predictions || predictions.length === 0) return null;
+
+  return predictions.reduce((top, current) => {
+    return current.confidence > top.confidence ? current : top;
+  });
+}
+/* ------------------ Render Results ------------------ */
+async function renderResults(predictions) {
+  resultsEl.innerHTML = "";
+
+  if (!predictions || predictions.length === 0) {
+    resultsEl.innerHTML = `
+      <div class="result">
+        <strong>No bird sounds detected</strong><br>
+        പക്ഷി ശബ്ദങ്ങൾ കണ്ടെത്താനായില്ല
+      </div>`;
+    return;
+  }
+
+  for (const p of predictions) {
+    const wiki = await fetchWikiData(p.bird);
+    const confidencePercent = Math.round(p.confidence * 100);
+
+    const card = document.createElement("div");
+    card.className = "result";
+    card.innerHTML = `
+      ${wiki.image ? `<img src="${wiki.image}" />` : ""}
+
+      <div class="info">
+       <h3>${p.bird}</h3>
+${wiki.malayalam ? `<div class="mal-name">${wiki.malayalam}</div>` : ""}
+<em>${wiki.scientific}</em>
+
+        <div class="confidence">
+          <span>${confidencePercent}% confidence</span>
+          <div class="confidence-bar">
+            <div class="confidence-fill" style="width:${confidencePercent}%"></div>
+          </div>
+        </div>
+
+        <p>${wiki.description}</p>
+
+        <div class="env-note">
+          <h4>IUCN Conservation Status</h4>
+          <p>${wiki.iucn}</p>
+
+          <h4>Distribution</h4>
+          <p>${wiki.distribution}</p>
+        </div>
       </div>
+    `;
 
-      <div>
-        <h4>System Implementation</h4>
-        <p>
-          This web application demonstrates the same concept using a
-          browser-based microphone. Audio is analyzed using an AI bird sound
-          classification model inspired by the BirdNET deep learning framework.
-          Only the most confident species per recording is stored in a
-          cloud-hosted PostgreSQL database (Supabase) and used to visualize
-          detection history, biodiversity trends, and ecosystem health.
-        </p>
-      </div>
-    </div>
+    resultsEl.appendChild(card);
+  }
+}
 
-    <p class="footer-meta">
-      AI Model: BirdNET-inspired CNN &nbsp;•&nbsp;
-      Backend: Supabase (PostgreSQL) &nbsp;•&nbsp;
-      Frontend: Web Audio API + Chart.js
+/* ================== HISTORY STORAGE ================== */
+
+async function saveDetections(predictions) {
+  if (!predictions.length) return;
+
+  const rows = predictions.map(p => ({
+    bird: p.bird,
+    confidence: p.confidence
+  }));
+
+  const { data, error } = await supabaseClient
+    .from("detections")
+    .insert(rows)
+    .select();
+
+  if (error) {
+    console.error("INSERT FAILED:", error);
+  } else {
+    console.log("INSERT OK:", data);
+  }
+}
+
+async function fetchDetections(range = "week") {
+  let fromDate = new Date();
+
+  if (range === "day") fromDate.setDate(fromDate.getDate() - 1);
+  if (range === "week") fromDate.setDate(fromDate.getDate() - 7);
+  if (range === "month") fromDate.setDate(fromDate.getDate() - 30);
+
+  const { data, error } = await supabaseClient
+    .from("detections")
+    .select("*")
+    .gte("created_at", fromDate.toISOString())
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("FETCH FAILED:", error);
+    return [];
+  }
+
+  console.log("FETCH OK:", data);
+  return data;
+}
+
+async function showHistory(range = currentHistoryRange) {
+  currentHistoryRange = range;
+
+  const historyResults = document.getElementById("historyResults");
+  historyResults.innerHTML = "<p>Loading...</p>";
+
+  const history = await fetchDetections(range);
+
+  if (!history.length) {
+    historyResults.innerHTML = "<p>No history available.</p>";
+    updateBiodiversityScore([]);
+    if (speciesChart) speciesChart.destroy();
+    if (biodiversityChart) biodiversityChart.destroy();
+    return;
+  }
+
+  historyResults.innerHTML = "";
+
+  const birdMap = {};
+  history.forEach(item => {
+    birdMap[item.bird] = (birdMap[item.bird] || 0) + 1;
+  });
+
+  Object.entries(birdMap).forEach(([bird, count]) => {
+    const div = document.createElement("div");
+    div.className = "history-item";
+    div.innerHTML = `<strong>${bird}</strong> <span>Detected ${count} times</span>`;
+    historyResults.appendChild(div);
+  });
+
+  renderCharts(history);
+  renderBiodiversityTrend(history);
+  updateBiodiversityScore(history);
+}
+
+/* ================== CLEAR HISTORY ================== */
+
+async function clearHistory() {
+  if (!confirm("Clear all bird detection history?")) return;
+
+  const { error } = await supabaseClient
+    .from("detections")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+
+  if (error) {
+    console.error(error);
+    alert("Failed to clear history");
+    return;
+  }
+
+  document.getElementById("historyResults").innerHTML =
+    "<p>History cleared.</p>";
+
+  if (speciesChart) speciesChart.destroy();
+  if (biodiversityChart) biodiversityChart.destroy();
+
+  updateBiodiversityScore([]);
+}
+
+/* ================== BIODIVERSITY SCORE ================== */
+
+
+function updateBiodiversityScore(filteredHistory = []) {
+  const el = document.getElementById("biodiversityScore");
+  if (!el) return;
+
+  const species = new Set(filteredHistory.map(h => h.bird));
+  const score = Math.min(100, Math.round((species.size / 20) * 100));
+
+  el.innerHTML = `
+    <h3>Biodiversity Score</h3>
+    <strong>${score}/100</strong>
+    <p>
+      ${
+        score > 70
+          ? "High biodiversity – healthy ecosystem"
+          : score > 40
+          ? "Moderate biodiversity"
+          : "Low biodiversity – potential ecological stress"
+      }
     </p>
-  </div>
-</footer>
-</body>
-</html>
+    <small>
+      Based on unique bird species detected in the selected time period.
+    </small>
+  `;
+}
+
+/* ================== CHARTS ================== */
+
+let speciesChart;
+let biodiversityChart;
+
+function renderCharts(filteredHistory = []) {
+  if (!filteredHistory || filteredHistory.length === 0) return;
+
+  const canvas = document.getElementById("speciesChart");
+  if (!canvas) return;
+
+  const counts = {};
+  filteredHistory.forEach(h => {
+    counts[h.bird] = (counts[h.bird] || 0) + 1;
+  });
+
+  if (speciesChart) speciesChart.destroy();
+
+  speciesChart = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(counts),
+      datasets: [{
+        label: "Detections",
+        data: Object.values(counts),
+        backgroundColor: "#60a5fa"
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+function renderBiodiversityTrend(filteredHistory = []) {
+  if (!filteredHistory || filteredHistory.length === 0) return;
+
+  const canvas = document.getElementById("biodiversityTrendChart");
+  if (!canvas) return;
+
+  const days = {};
+  filteredHistory.forEach(h => {
+    const d = new Date(h.created_at).toDateString();
+    if (!days[d]) days[d] = new Set();
+    days[d].add(h.bird);
+  });
+
+  if (biodiversityChart) biodiversityChart.destroy();
+
+  biodiversityChart = new Chart(canvas.getContext("2d"), {
+    type: "line",
+    data: {
+      labels: Object.keys(days),
+      datasets: [{
+        label: "Unique Species",
+        data: Object.values(days).map(s => s.size),
+        borderColor: "#22c55e",
+        tension: 0.3
+      }]
+    }
+  });
+}
+window.addEventListener("DOMContentLoaded", () => {
+  showHistory("week"); // default view on refresh
+});
