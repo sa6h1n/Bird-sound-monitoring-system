@@ -12,6 +12,7 @@ const API = "https://sa6h1n-bird-sound-monitor.hf.space/analyze";
 let recorder, stream, audioCtx, analyser, dataArray;
 let countdownInterval;
 let timeLeft = 10;
+let activeRange = "week";
 
 function resizeCanvas() {
   canvas.width = canvas.offsetWidth;
@@ -161,9 +162,13 @@ recordBtn.onclick = async () => {
       const res = await fetch(API, { method: "POST", body: fd });
       const data = await res.json();
 
-      renderResults(data.predictions);
+     renderResults(data.predictions);   // show all birds in UI
 
-      saveDetections(data.predictions);
+const topPrediction = getTopPrediction(data.predictions);
+
+if (topPrediction) {
+  saveDetections([topPrediction]); // ONLY store top bird
+}
 renderCharts(); // for graphs
 
       statusEl.textContent = "Analysis complete";
@@ -171,7 +176,15 @@ renderCharts(); // for graphs
     };
   }
 };
+/* ================== HELPERS ================== */
 
+function getTopPrediction(predictions) {
+  if (!predictions || predictions.length === 0) return null;
+
+  return predictions.reduce((top, current) => {
+    return current.confidence > top.confidence ? current : top;
+  });
+}
 /* ------------------ Render Results ------------------ */
 async function renderResults(predictions) {
   resultsEl.innerHTML = "";
@@ -247,11 +260,19 @@ function saveDetections(predictions) {
   });
 
   localStorage.setItem("birdDetectionHistory", JSON.stringify(history));
+
+  // ✅ IMMEDIATELY UPDATE UI
+  showHistory(activeRange);
+  renderCharts();
+  renderBiodiversityTrend();
+  updateBiodiversityScore();
 }
 
 /* ================== SHOW HISTORY ================== */
 
-function showHistory(range) {
+function showHistory(range = activeRange) {
+  activeRange = range;
+
   const historyResults = document.getElementById("historyResults");
   if (!historyResults) return;
 
@@ -261,7 +282,8 @@ function showHistory(range) {
     JSON.parse(localStorage.getItem("birdDetectionHistory")) || [];
 
   if (history.length === 0) {
-    historyResults.innerHTML = "<p>No history available.</p>";
+    historyResults.innerHTML =
+      "<p style='opacity:0.7'>No detections yet.</p>";
     return;
   }
 
@@ -277,7 +299,8 @@ function showHistory(range) {
   );
 
   if (filtered.length === 0) {
-    historyResults.innerHTML = "<p>No detections in this period.</p>";
+    historyResults.innerHTML =
+      "<p style='opacity:0.7'>No detections in this period.</p>";
     return;
   }
 
@@ -290,15 +313,11 @@ function showHistory(range) {
     const div = document.createElement("div");
     div.className = "history-item";
     div.innerHTML = `
-      <strong>${bird}</strong>
-      <span>Detected ${count} times</span>
+      <strong>${bird}</strong><br>
+      Detected ${count} times
     `;
     historyResults.appendChild(div);
   });
-
-  renderCharts();
-  renderBiodiversityTrend();
-  updateBiodiversityScore();
 }
 
 /* ================== CLEAR HISTORY ================== */
@@ -459,4 +478,16 @@ function renderBiodiversityTrend() {
       }]
     }
   });
+}
+renderResults(data.predictions);   // UI shows all birds
+
+const topPrediction = getTopPrediction(data.predictions);
+
+if (topPrediction) {
+  saveDetections([topPrediction]); // history gets only 1 bird
+
+  showHistory("week");
+  renderCharts();
+  renderBiodiversityTrend();
+  updateBiodiversityScore();
 }
