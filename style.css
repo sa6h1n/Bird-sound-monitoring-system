@@ -1,21 +1,19 @@
 * {
   box-sizing: border-box;
-  font-family: system-ui, -apple-system;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
   background: radial-gradient(circle at top, #0f172a, #020617);
-  display: flex;
-  justify-content: center;
-  align-items: center;
   color: #e5e7eb;
 }
 
 .app {
-  width: 480px;
-  background: rgba(2, 6, 23, 0.9);
+  max-width: 520px;
+  margin: 30px auto;
+  background: rgba(2, 6, 23, 0.95);
   border-radius: 20px;
   padding: 26px;
 }
@@ -28,7 +26,9 @@ h1 {
 .controls {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 12px;
+  margin-bottom: 10px;
 }
 
 button {
@@ -54,12 +54,12 @@ button:disabled {
   cursor: not-allowed;
 }
 
-canvas {
+canvas#waveform {
   width: 100%;
   height: 90px;
   background: #020617;
   border-radius: 12px;
-  margin: 16px 0;
+  margin: 14px 0;
 }
 
 .timer {
@@ -71,46 +71,24 @@ canvas {
 .status {
   text-align: center;
   font-size: 14px;
-  margin-top: 6px;
   opacity: 0.8;
-}
-
-.env-alert {
-  margin: 14px 0;
-  padding: 12px;
-  border-radius: 12px;
-  text-align: center;
-}
-
-.env-alert.normal {
-  background: #052e16;
-  color: #86efac;
-}
-
-.env-alert.warning {
-  background: #422006;
-  color: #fde68a;
-}
-
-.env-alert.critical {
-  background: #450a0a;
-  color: #fecaca;
 }
 
 .results {
   display: grid;
   gap: 16px;
+  margin-top: 14px;
 }
 
 .result {
   background: #020617;
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
   animation: fadeUp 0.4s ease;
 }
 
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(14px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -124,29 +102,15 @@ canvas {
   padding: 14px;
 }
 
-.env-note {
-  margin-top: 10px;
-  font-size: 13px;
-  border-left: 3px solid #22c55e;
-  padding-left: 8px;
-}
-.env-note ul {
-  margin: 6px 0 0;
-  padding-left: 18px;
-}
-
-.env-note li {
-  font-size: 13px;
-  line-height: 1.4;
-}
 .scientific-name {
   font-size: 12px;
   font-style: italic;
   color: #94a3b8;
 }
+
 .confidence {
   margin: 10px 0;
-  font-size: 14px;
+  font-size: 13px;
   color: #cbd5e1;
 }
 
@@ -163,4 +127,99 @@ canvas {
   height: 100%;
   background: linear-gradient(90deg, #22c55e, #60a5fa);
   transition: width 0.6s ease;
+}
+
+
+.env-note {
+  margin-top: 12px;
+  font-size: 13px;
+  border-left: 3px solid #22c55e;
+  padding-left: 10px;
+}
+
+
+.dashboard {
+  max-width: 1200px;
+  margin: 40px auto;
+  padding: 0 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.history {
+  background: #0b1220;
+  padding: 20px;
+  border-radius: 16px;
+}
+
+.history h2 {
+  margin-bottom: 12px;
+}
+
+.history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.history-controls button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #1e293b;
+  color: white;
+  border: none;
+}
+
+.history-controls button:hover {
+  background: #334155;
+}
+
+.history-controls .danger {
+  background: #7f1d1d;
+}
+
+.history-results p {
+  opacity: 0.7;
+}
+
+.history-item {
+  background: #020617;
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.analytics {
+  background: #0b1220;
+  padding: 20px;
+  border-radius: 16px;
+}
+
+.analytics h2 {
+  margin-bottom: 12px;
+}
+
+canvas {
+  max-width: 100%;
+}
+
+.biodiversity-score {
+  background: #022c22;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.biodiversity-score strong {
+  font-size: 26px;
+  color: #4ade80;
+}
+
+@media (max-width: 900px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
 }
