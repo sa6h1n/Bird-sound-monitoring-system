@@ -90,13 +90,15 @@ let malayalam = "";
 
       // IUCN status (P141)
       const iucnMap = {
-        Q211005: "Least Concern",
-        Q211006: "Near Threatened",
-        Q211007: "Vulnerable",
-        Q211008: "Endangered",
-        Q211009: "Critically Endangered",
-        Q11394: "Extinct"
-      };
+  Q211005: "Least Concern",
+  Q211006: "Near Threatened",
+  Q211007: "Vulnerable",
+  Q211008: "Endangered",
+  Q211009: "Critically Endangered",
+  Q11394:  "Extinct",
+  Q237350: "Extinct in the Wild",
+  Q219127: "Data Deficient"
+};
 
       const iucnId =
         entity?.claims?.P141?.[0]?.mainsnak?.datavalue?.value?.id;
