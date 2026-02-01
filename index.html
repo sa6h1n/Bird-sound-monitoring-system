@@ -61,5 +61,41 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="script.js"></script>
 
+<footer class="project-footer">
+  <div class="footer-inner">
+    <h3>Project Overview</h3>
+
+    <div class="footer-columns">
+      <div>
+        <h4>Real-World Application</h4>
+        <p>
+          In real-world deployments, this system can be integrated with IoT
+          devices such as Raspberry Pi or ESP32 equipped with microphones and
+          placed in natural habitats. These devices continuously capture
+          environmental audio and transmit it for centralized analysis,
+          enabling long-term wildlife and ecosystem monitoring.
+        </p>
+      </div>
+
+      <div>
+        <h4>System Implementation</h4>
+        <p>
+          This web application demonstrates the same concept using a
+          browser-based microphone. Audio is analyzed using an AI bird sound
+          classification model inspired by the BirdNET deep learning framework.
+          Only the most confident species per recording is stored in a
+          cloud-hosted PostgreSQL database (Supabase) and used to visualize
+          detection history, biodiversity trends, and ecosystem health.
+        </p>
+      </div>
+    </div>
+
+    <p class="footer-meta">
+      AI Model: BirdNET-inspired CNN &nbsp;•&nbsp;
+      Backend: Supabase (PostgreSQL) &nbsp;•&nbsp;
+      Frontend: Web Audio API + Chart.js
+    </p>
+  </div>
+</footer>
 </body>
 </html>
