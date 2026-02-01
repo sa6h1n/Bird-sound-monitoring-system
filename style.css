@@ -243,3 +243,51 @@ canvas {
   color: #c7d2fe;
   margin-top: 2px;
 }
+.project-footer {
+  margin-top: 4rem;
+  padding: 3rem 1.5rem 2rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  background: transparent;
+}
+
+.footer-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.project-footer h3 {
+  font-size: 0.9rem;
+  letter-spacing: 0.12em;
+  color: #7dd3fc;
+  margin-bottom: 2rem;
+}
+
+.footer-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.5rem;
+  text-align: left;
+}
+
+.footer-columns h4 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #93c5fd;
+  margin-bottom: 0.6rem;
+}
+
+.footer-columns p {
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.footer-meta {
+  margin-top: 2rem;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  opacity: 0.85;
+  letter-spacing: 0.04em;
+}
