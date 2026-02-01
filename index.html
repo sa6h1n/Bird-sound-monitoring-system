@@ -27,7 +27,10 @@
 
   <section class="history">
     <h2>📁 Bird Detection History</h2>
-
+ <p class="section-note">
+    Shows the most confident bird detected per recording.
+    Multiple predictions may occur, but only the dominant species is stored.
+  </p>
     <div class="history-controls">
       <button onclick="showHistory('day')">Today</button>
       <button onclick="showHistory('week')">Last 7 Days</button>
@@ -42,7 +45,11 @@
 
   <section class="analytics">
     <h2>📊 Analytics</h2>
-
+  <p class="section-note">
+    Charts reflect dominant species per recording to avoid duplicate counts.
+     Biodiversity Score represents the number of unique bird species detected
+  in the past 7 days. Higher diversity indicates a healthier ecosystem.
+  </p>
     <div id="biodiversityScore" class="biodiversity-score"></div>
 
     <canvas id="speciesChart"></canvas>
