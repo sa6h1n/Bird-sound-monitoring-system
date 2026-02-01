@@ -14,21 +14,45 @@
   <div class="controls">
     <button id="recordBtn">🎙 Record</button>
     <button id="stopBtn" disabled>⏹ Stop</button>
+    <div id="timer" class="timer">10s</div>
   </div>
 
   <canvas id="waveform"></canvas>
-
-  <div id="timer" class="timer">10 s</div>
   <div id="status" class="status">Ready</div>
-
-  <div id="envAlert" class="env-alert normal">
-    Environment appears stable
-  </div>
-  
 
   <div id="results" class="results"></div>
 </div>
 
+<section class="dashboard">
+
+  <section class="history">
+    <h2>📁 Bird Detection History</h2>
+
+    <div class="history-controls">
+      <button onclick="showHistory('day')">Today</button>
+      <button onclick="showHistory('week')">Last 7 Days</button>
+      <button onclick="showHistory('month')">Last 30 Days</button>
+      <button class="danger" onclick="clearHistory()">Clear All</button>
+    </div>
+
+    <div id="historyResults" class="history-results">
+      <p>No history yet.</p>
+    </div>
+  </section>
+
+  <section class="analytics">
+    <h2>📊 Analytics</h2>
+
+    <div id="biodiversityScore" class="biodiversity-score"></div>
+
+    <canvas id="speciesChart"></canvas>
+    <canvas id="biodiversityTrendChart"></canvas>
+  </section>
+
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="script.js"></script>
+
 </body>
 </html>
