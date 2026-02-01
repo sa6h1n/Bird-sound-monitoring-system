@@ -505,9 +505,7 @@ function renderCharts(filteredHistory = []) {
             autoSkip: false,          // 🔑 show ALL names
             font: { size: 8 },
             callback: function(value) {
-              const label = this.getLabelForValue(value);
-              // split long names into multiple lines
-              return this.getLabelForValue(value);
+               return this.getLabelForValue(value).replace(/\s+/g, " ");
             }
           }
         },
