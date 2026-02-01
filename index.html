@@ -51,17 +51,26 @@
   </section>
 
   <section class="analytics">
-    <h2>📊 Analytics</h2>
+  <h2>📊 Analytics</h2>
+
   <p class="section-note">
     Charts reflect dominant species per recording to avoid duplicate counts.
-     Biodiversity Score represents the number of unique bird species detected
-  in the past 7 days. Higher diversity indicates a healthier ecosystem.
+    Biodiversity Score represents the number of unique bird species detected
+    in the past 7 days. Higher diversity indicates a healthier ecosystem.
   </p>
-    <div id="biodiversityScore" class="biodiversity-score"></div>
 
+  <div id="biodiversityScore" class="biodiversity-score"></div>
+
+  <p class="chart-title">Species Detection Frequency</p>
+  <div class="chart-box">
     <canvas id="speciesChart"></canvas>
+  </div>
+
+  <p class="chart-title">Daily Biodiversity Trend</p>
+  <div class="chart-box small">
     <canvas id="biodiversityTrendChart"></canvas>
-  </section>
+  </div>
+</section>
 
 </section>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
