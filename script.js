@@ -5,6 +5,17 @@ const resultsEl = document.getElementById("results");
 const canvas = document.getElementById("waveform");
 const ctx = canvas.getContext("2d");
 const timerEl = document.getElementById("timer");
+const NON_BIRD_LABELS = [
+  "human",
+  "whistle",
+  "speech",
+  "noise",
+  "silence",
+  "insect",
+  "wind",
+  "rain",
+  "engine"
+];
 
 const API = "https://sa6h1n-bird-sound-monitor.hf.space/analyze";
 
@@ -12,7 +23,8 @@ const API = "https://sa6h1n-bird-sound-monitor.hf.space/analyze";
 let recorder, stream, audioCtx, analyser, dataArray;
 let countdownInterval;
 let timeLeft = 10;
-let activeRange = "week";
+
+let currentHistoryRange = "week"; // default
 
 function resizeCanvas() {
   canvas.width = canvas.offsetWidth;
@@ -51,8 +63,9 @@ async function fetchWikiData(bird) {
     const wiki = await wikiRes.json();
 
     let scientific = "Not available";
-    let iucn = "Not evaluated";
-    let distribution = "Distribution information not available.";
+let iucn = "Not evaluated";
+let distribution = "Distribution information not available.";
+let malayalam = "";
 
     // Wikidata lookup
     if (wiki.wikibase_item) {
@@ -83,6 +96,7 @@ async function fetchWikiData(bird) {
       if (iucnId && iucnMap[iucnId]) {
         iucn = iucnMap[iucnId];
       }
+      malayalam = entity?.labels?.ml?.value || "";
     }
 
     // Simple distribution extraction
@@ -90,13 +104,14 @@ async function fetchWikiData(bird) {
       distribution = wiki.extract.split(".")[0] + ".";
     }
 
-    return {
-      image: wiki.thumbnail?.source || "",
-      description: wiki.extract || "No description available.",
-      scientific,
-      iucn,
-      distribution
-    };
+   return {
+  image: wiki.thumbnail?.source || "",
+  description: wiki.extract || "No description available.",
+  scientific,
+  iucn,
+  distribution,
+  malayalam
+};
   } catch (err) {
     return {
       image: "",
@@ -135,47 +150,82 @@ recordBtn.onclick = async () => {
   timeLeft = 10;
   timerEl.textContent = `${timeLeft}s`;
 
-  countdownInterval = setInterval(() => {
-    timeLeft--;
-    timerEl.textContent = `${timeLeft}s`;
-    if (timeLeft <= 0) stopRecording();
-  }, 1000);
+ countdownInterval = setInterval(() => {
+  if (timeLeft <= 0) return;
+
+  timeLeft--;
+  timerEl.textContent = `${timeLeft}s`;
+
+  if (timeLeft === 0) {
+    stopRecording();
+  }
+}, 1000);
 
   stopBtn.onclick = stopRecording;
 
-  function stopRecording() {
-    clearInterval(countdownInterval);
-    timerEl.textContent = "0s";
+recorder.onstop = async () => {
+  statusEl.textContent = "Analyzing…";
 
-    recorder.stop();
-    stream.getTracks().forEach(t => t.stop());
-    audioCtx.close();
-    stopBtn.disabled = true;
+  try {
+    const blob = new Blob(chunks, { type: "audio/wav" });
+    const fd = new FormData();
+    fd.append("file", blob, "recording.wav");
 
-    recorder.onstop = async () => {
-      statusEl.textContent = "Analyzing…";
+    const res = await fetch(API, { method: "POST", body: fd });
+    const data = await res.json();
 
-      const blob = new Blob(chunks, { type: "audio/wav" });
-      const fd = new FormData();
-      fd.append("file", blob, "recording.wav");
+    // Show predictions
+    await renderResults(data.predictions);
 
-      const res = await fetch(API, { method: "POST", body: fd });
-      const data = await res.json();
+    // Store ONLY real birds
+    const topPrediction = getTopPrediction(data.predictions);
+    if (
+      topPrediction &&
+      topPrediction.confidence >= 0.3 &&
+      !NON_BIRD_LABELS.some(label =>
+        topPrediction.bird.toLowerCase().includes(label)
+      )
+    ) {
+      saveDetections([topPrediction]);
+    }
 
-     renderResults(data.predictions);   // show all birds in UI
+    // Refresh history & analytics
+    showHistory(currentHistoryRange);
 
-const topPrediction = getTopPrediction(data.predictions);
+    // ✅ THIS WAS MISSING
+    resetControls();
 
-if (topPrediction) {
-  saveDetections([topPrediction]); // ONLY store top bird
-}
-renderCharts(); // for graphs
-
-      statusEl.textContent = "Analysis complete";
-      recordBtn.disabled = false;
-    };
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Analysis failed";
+    resetControls();
   }
+}
 };
+function stopRecording() {
+  clearInterval(countdownInterval);
+  countdownInterval = null;
+
+  stopBtn.disabled = true;
+
+  if (recorder && recorder.state !== "inactive") {
+    recorder.stop();
+  }
+
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+  }
+
+  if (audioCtx) {
+    audioCtx.close();
+  }
+}
+function resetControls() {
+  recordBtn.disabled = false;
+  stopBtn.disabled = true;
+  statusEl.textContent = "Ready";
+  timerEl.textContent = "10 s";
+}
 /* ================== HELPERS ================== */
 
 function getTopPrediction(predictions) {
@@ -208,8 +258,9 @@ async function renderResults(predictions) {
       ${wiki.image ? `<img src="${wiki.image}" />` : ""}
 
       <div class="info">
-        <h3>${p.bird}</h3>
-        <em>${wiki.scientific}</em>
+       <h3>${p.bird}</h3>
+${wiki.malayalam ? `<div class="mal-name">${wiki.malayalam}</div>` : ""}
+<em>${wiki.scientific}</em>
 
         <div class="confidence">
           <span>${confidencePercent}% confidence</span>
@@ -262,7 +313,7 @@ function saveDetections(predictions) {
   localStorage.setItem("birdDetectionHistory", JSON.stringify(history));
 
   // ✅ IMMEDIATELY UPDATE UI
-  showHistory(activeRange);
+ showHistory(currentHistoryRange);
   renderCharts();
   renderBiodiversityTrend();
   updateBiodiversityScore();
@@ -270,8 +321,8 @@ function saveDetections(predictions) {
 
 /* ================== SHOW HISTORY ================== */
 
-function showHistory(range = activeRange) {
-  activeRange = range;
+function showHistory(range = currentHistoryRange) {
+  currentHistoryRange = range;
 
   const historyResults = document.getElementById("historyResults");
   if (!historyResults) return;
@@ -282,16 +333,17 @@ function showHistory(range = activeRange) {
     JSON.parse(localStorage.getItem("birdDetectionHistory")) || [];
 
   if (history.length === 0) {
-    historyResults.innerHTML =
-      "<p style='opacity:0.7'>No detections yet.</p>";
+    historyResults.innerHTML = "<p>No history available.</p>";
+    renderCharts([]);
+    renderBiodiversityTrend([]);
+    updateBiodiversityScore([]);
     return;
   }
 
   const now = Date.now();
-  let rangeMs = 0;
+  let rangeMs = 7 * 24 * 60 * 60 * 1000; // default week
 
   if (range === "day") rangeMs = 24 * 60 * 60 * 1000;
-  if (range === "week") rangeMs = 7 * 24 * 60 * 60 * 1000;
   if (range === "month") rangeMs = 30 * 24 * 60 * 60 * 1000;
 
   const filtered = history.filter(
@@ -299,11 +351,14 @@ function showHistory(range = activeRange) {
   );
 
   if (filtered.length === 0) {
-    historyResults.innerHTML =
-      "<p style='opacity:0.7'>No detections in this period.</p>";
+    historyResults.innerHTML = "<p>No detections in this period.</p>";
+    renderCharts([]);
+    renderBiodiversityTrend([]);
+    updateBiodiversityScore([]);
     return;
   }
 
+  // Group by bird
   const birdMap = {};
   filtered.forEach(item => {
     birdMap[item.bird] = (birdMap[item.bird] || 0) + 1;
@@ -313,11 +368,16 @@ function showHistory(range = activeRange) {
     const div = document.createElement("div");
     div.className = "history-item";
     div.innerHTML = `
-      <strong>${bird}</strong><br>
-      Detected ${count} times
+      <strong>${bird}</strong>
+      <span>Detected ${count} times</span>
     `;
     historyResults.appendChild(div);
   });
+
+  // 🔑 ONE place to update everything
+  renderCharts(filtered);
+  renderBiodiversityTrend(filtered);
+  updateBiodiversityScore(filtered);
 }
 
 /* ================== CLEAR HISTORY ================== */
@@ -384,11 +444,12 @@ function calculateBiodiversityScore() {
   return Math.min(100, Math.round((species.size / Smax) * 100));
 }
 
-function updateBiodiversityScore() {
+function updateBiodiversityScore(filteredHistory = []) {
   const el = document.getElementById("biodiversityScore");
   if (!el) return;
 
-  const score = calculateBiodiversityScore();
+  const species = new Set(filteredHistory.map(h => h.bird));
+  const score = Math.min(100, Math.round((species.size / 20) * 100));
 
   el.innerHTML = `
     <h3>Biodiversity Score</h3>
@@ -402,6 +463,9 @@ function updateBiodiversityScore() {
           : "Low biodiversity – potential ecological stress"
       }
     </p>
+    <small>
+      Based on unique bird species detected in the selected time period.
+    </small>
   `;
 }
 
@@ -410,14 +474,11 @@ function updateBiodiversityScore() {
 let speciesChart;
 let biodiversityChart;
 
-function renderCharts() {
-  const history =
-    JSON.parse(localStorage.getItem("birdDetectionHistory")) || [];
-
-  if (history.length === 0) return;
+function renderCharts(filteredHistory = []) {
+  if (!filteredHistory.length) return;
 
   const counts = {};
-  history.forEach(h => {
+  filteredHistory.forEach(h => {
     counts[h.bird] = (counts[h.bird] || 0) + 1;
   });
 
@@ -434,6 +495,7 @@ function renderCharts() {
     data: {
       labels,
       datasets: [{
+        label: "Detections",
         data: values,
         backgroundColor: "#60a5fa"
       }]
@@ -445,20 +507,17 @@ function renderCharts() {
   });
 }
 
-function renderBiodiversityTrend() {
-  const history =
-    JSON.parse(localStorage.getItem("birdDetectionHistory")) || [];
-
-  if (history.length === 0) return;
+function renderBiodiversityTrend(filteredHistory = []) {
+  if (!filteredHistory.length) return;
 
   const days = {};
-  history.forEach(h => {
+  filteredHistory.forEach(h => {
     const d = new Date(h.timestamp).toDateString();
     if (!days[d]) days[d] = new Set();
     days[d].add(h.bird);
   });
 
-  const labels = Object.keys(days).slice(-7);
+  const labels = Object.keys(days);
   const values = labels.map(d => days[d].size);
 
   const canvas = document.getElementById("biodiversityTrendChart");
@@ -479,15 +538,6 @@ function renderBiodiversityTrend() {
     }
   });
 }
-renderResults(data.predictions);   // UI shows all birds
-
-const topPrediction = getTopPrediction(data.predictions);
-
-if (topPrediction) {
-  saveDetections([topPrediction]); // history gets only 1 bird
-
-  showHistory("week");
-  renderCharts();
-  renderBiodiversityTrend();
-  updateBiodiversityScore();
-}
+window.addEventListener("DOMContentLoaded", () => {
+  showHistory("week"); // default view on refresh
+});
