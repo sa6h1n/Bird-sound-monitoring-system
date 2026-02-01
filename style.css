@@ -223,3 +223,23 @@ canvas {
     grid-template-columns: 1fr;
   }
 }
+.section-note {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 6px 0 12px;
+  line-height: 1.4;
+}
+
+.bio-score {
+  margin-top: 14px;
+  padding: 10px;
+  background: #020617;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+.mal-name {
+  font-size: 14px;
+  color: #c7d2fe;
+  margin-top: 2px;
+}
