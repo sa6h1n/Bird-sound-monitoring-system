@@ -1,15 +1,42 @@
-* {
-  box-sizing: border-box;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+/* MAIN BACKGROUND */
+body {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-weight: 400;
+  color: #e5e7eb;
+  background:
+    radial-gradient(circle at top, rgba(34,197,94,0.22), transparent 55%),
+    linear-gradient(180deg, #010c09 0%, #04110a 100%);
+  position: relative;
+  overflow-x: hidden;
+}
+
+
+body {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-weight: 400;
+}
+
+h1, h2, h3, .brand {
+  font-family: "Merriweather", serif;
+}
+.brand {
+  font-weight: 700;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top, #0f172a, #020617);
+  background:
+    radial-gradient(circle at top, rgba(34,197,94,0.18), transparent 55%),
+    linear-gradient(180deg, #020617 0%, #04110a 100%);
   color: #e5e7eb;
 }
-
 .app {
   max-width: 520px;
   margin: 30px auto;
@@ -246,7 +273,7 @@ canvas {
 .project-footer {
   margin-top: 4rem;
   padding: 3rem 1.5rem 2rem;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid rgba(6, 145, 85, 0.08);
   background: transparent;
 }
 
@@ -259,7 +286,7 @@ canvas {
 .project-footer h3 {
   font-size: 0.9rem;
   letter-spacing: 0.12em;
-  color: #7dd3fc;
+  color: #157725;
   margin-bottom: 2rem;
 }
 
@@ -274,14 +301,14 @@ canvas {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #93c5fd;
+  color: #157725;
   margin-bottom: 0.6rem;
 }
 
 .footer-columns p {
   font-size: 0.78rem;
   line-height: 1.6;
-  color: #cbd5e1;
+  color: #e6eaef;
 }
 
 .footer-meta {
@@ -290,4 +317,24 @@ canvas {
   color: #94a3b8;
   opacity: 0.85;
   letter-spacing: 0.04em;
+}
+.project-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.brand {
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+   color: #7ee7b8;
+  text-transform: uppercase;
+}
+
+.tagline {
+  margin-top: 0.4rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  color: #cbd5e1;
+  text-transform: uppercase;
 }
