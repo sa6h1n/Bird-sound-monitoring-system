@@ -359,17 +359,47 @@ async function showHistory(range = currentHistoryRange) {
   historyResults.innerHTML = "";
 
   const birdMap = {};
+
+  // Build aggregation
   history.forEach(item => {
-    birdMap[item.bird] = (birdMap[item.bird] || 0) + 1;
+    if (!birdMap[item.bird]) {
+      birdMap[item.bird] = {
+        count: 0,
+        lastSeen: item.created_at
+      };
+    }
+
+    birdMap[item.bird].count++;
+
+    if (new Date(item.created_at) > new Date(birdMap[item.bird].lastSeen)) {
+      birdMap[item.bird].lastSeen = item.created_at;
+    }
   });
 
-  Object.entries(birdMap).forEach(([bird, count]) => {
-    const div = document.createElement("div");
-    div.className = "history-item";
-    div.innerHTML = `<strong>${bird}</strong> <span>Detected ${count} times</span>`;
-    historyResults.appendChild(div);
-  });
+  // ✅ RENDER HISTORY ITEMS
+ Object.entries(birdMap).forEach(([bird, data]) => {
 
+  // 🔑 FORCE UTC INTERPRETATION
+  const utcDate = new Date(data.lastSeen + "Z");
+
+  const formatted = new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata"
+  }).format(utcDate);
+
+  const div = document.createElement("div");
+  div.className = "history-item";
+  div.innerHTML = `
+    <strong>${bird}</strong>
+    <span>Detected ${data.count} ${data.count === 1 ? "time" : "times"}</span>
+    <div class="history-time">Last detected: ${formatted} (IST)</div>
+  `;
+
+  historyResults.appendChild(div);
+});
+
+  // ✅ UPDATE ANALYTICS
   renderCharts(history);
   renderBiodiversityTrend(history);
   updateBiodiversityScore(history);
@@ -407,24 +437,28 @@ function updateBiodiversityScore(filteredHistory = []) {
   const el = document.getElementById("biodiversityScore");
   if (!el) return;
 
-  const species = new Set(filteredHistory.map(h => h.bird));
-  const score = Math.min(100, Math.round((species.size / 20) * 100));
+  const speciesSet = new Set(filteredHistory.map(h => h.bird));
+  const speciesCount = speciesSet.size;
+
+  const score = Math.min(100, Math.round((speciesCount / 20) * 100));
 
   el.innerHTML = `
     <h3>Biodiversity Score</h3>
-    <strong>${score}/100</strong>
+    <strong>${score} / 100</strong>
     <p>
       ${
         score > 70
-          ? "High biodiversity – healthy ecosystem"
+          ? "High biodiversity"
           : score > 40
           ? "Moderate biodiversity"
           : "Low biodiversity – potential ecological stress"
       }
     </p>
-    <small>
-      Based on unique bird species detected in the selected time period.
-    </small>
+
+    <div class="bio-meta">
+      <span>${speciesCount} unique species detected</span><br>
+      <span>Last 7 days</span>
+    </div>
   `;
 }
 
@@ -434,7 +468,7 @@ let speciesChart;
 let biodiversityChart;
 
 function renderCharts(filteredHistory = []) {
-  if (!filteredHistory || filteredHistory.length === 0) return;
+  if (!filteredHistory.length) return;
 
   const canvas = document.getElementById("speciesChart");
   if (!canvas) return;
@@ -453,12 +487,38 @@ function renderCharts(filteredHistory = []) {
       datasets: [{
         label: "Detections",
         data: Object.values(counts),
-        backgroundColor: "#60a5fa"
+        backgroundColor: "#60a5fa",
+        borderRadius: 6
       }]
     },
     options: {
       responsive: true,
-      plugins: { legend: { display: false } }
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        x: {
+          ticks: {
+            maxRotation: 45,
+            minRotation: 45,
+            autoSkip: false,          // 🔑 show ALL names
+            font: { size: 8 },
+            callback: function(value) {
+              const label = this.getLabelForValue(value);
+              // split long names into multiple lines
+              return this.getLabelForValue(value);
+            }
+          }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            font: { size: 11 }
+          }
+        }
+      }
     }
   });
 }
@@ -470,24 +530,71 @@ function renderBiodiversityTrend(filteredHistory = []) {
   if (!canvas) return;
 
   const days = {};
+
   filteredHistory.forEach(h => {
-    const d = new Date(h.created_at).toDateString();
-    if (!days[d]) days[d] = new Set();
-    days[d].add(h.bird);
+    const date = new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    }).format(new Date(h.created_at));
+
+    if (!days[date]) days[date] = new Set();
+    days[date].add(h.bird);
   });
+
+  const labels = Object.keys(days);
+  const values = Object.values(days).map(s => s.size);
 
   if (biodiversityChart) biodiversityChart.destroy();
 
   biodiversityChart = new Chart(canvas.getContext("2d"), {
     type: "line",
     data: {
-      labels: Object.keys(days),
+      labels,
       datasets: [{
         label: "Unique Species",
-        data: Object.values(days).map(s => s.size),
+        data: values,
         borderColor: "#22c55e",
-        tension: 0.3
+        backgroundColor: "rgba(34,197,94,0.15)",
+        fill: true,
+        tension: 0.35,
+        pointRadius: 4
       }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        x: {
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 5,
+            font: { size: 10 }
+          }
+        },
+  y: {
+  beginAtZero: true,
+  suggestedMax: 20,
+  title: {
+    display: true,
+    text: "Unique bird species detected",
+    color: "#cbd5e1",
+    font: {
+      size: 12,
+      weight: "600"
+    }
+  },
+  ticks: {
+    stepSize: 2,
+    precision: 0,
+    font: { size: 10 }
+  }
+}
+      }
     }
   });
 }
