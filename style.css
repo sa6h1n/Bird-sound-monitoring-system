@@ -258,7 +258,15 @@ canvas#waveform {
   border-radius: 10px;
   margin-bottom: 10px;
 }
+.history-controls .download {
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px dashed #4ade80;
+}
 
+.history-controls .download:hover {
+  background: #065f46;
+}
 
 .analytics {
   background: #0b1220;
