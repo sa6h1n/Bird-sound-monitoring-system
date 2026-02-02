@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WildRoot-Bird Sound Monitoring System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="app">
+  <header class="project-header">
+  <h1 class="brand">WildRoot</h1>
+  <p class="tagline">Bird Sound Monitoring System</p>
+</header>
+
+  <div class="controls">
+    <button id="recordBtn">🎙 Record</button>
+    <button id="stopBtn" disabled>⏹ Stop</button>
+    <div id="timer" class="timer">10s</div>
+  </div>
+
+  <canvas id="waveform"></canvas>
+  <div id="status" class="status">Ready</div>
+
+  <div id="results" class="results"></div>
+</div>
+
+<section class="dashboard">
+
+  <section class="history">
+    <h2>📁 Bird Detection History</h2>
+ <p class="section-note">
+    Shows the most confident bird detected per recording.
+    Multiple predictions may occur, but only the dominant species is stored.
+  </p>
+    <div class="history-controls">
+  <button data-range="day" onclick="showHistory('day', this)">Today</button>
+  <button data-range="week" onclick="showHistory('week', this)">Last 7 Days</button>
+  <button data-range="month" onclick="showHistory('month', this)">Last 30 Days</button>
+  <button class="danger" onclick="clearHistory()">Clear All</button>
+</div>
+
+    <div id="historyResults" class="history-results">
+      <p>No history yet.</p>
+    </div>
+  </section>
+
+  <section class="analytics">
+  <h2>📊 Analytics</h2>
+
+  <p class="section-note">
+    Charts reflect dominant species per recording to avoid duplicate counts.
+    Biodiversity Score represents the number of unique bird species detected
+    in the past 7 days. Higher diversity indicates a healthier ecosystem.
+  </p>
+
+  <div id="biodiversityScore" class="biodiversity-score"></div>
+<p id="chartRangeLabel" class="chart-range-label">
+  Showing: Last 7 Days
+</p>
+  <p class="chart-title">Species Detection Frequency</p>
+  <div class="chart-box">
+    <canvas id="speciesChart"></canvas>
+  </div>
+
+  <p class="chart-title">Daily Biodiversity Trend</p>
+  <div class="chart-box small">
+    <canvas id="biodiversityTrendChart"></canvas>
+  </div>
+</section>
+
+</section>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="script.js"></script>
+
+<footer class="project-footer">
+  <div class="footer-inner">
+    <h3>Project Overview</h3>
+
+    <div class="footer-columns">
+      <div>
+        <h4>Real-World Application</h4>
+        <p>
+          In real-world deployments, this system can be integrated with IoT
+          devices such as Raspberry Pi or ESP32 equipped with microphones and
+          placed in natural habitats. These devices continuously capture
+          environmental audio and transmit it for centralized analysis,
+          enabling long-term wildlife and ecosystem monitoring.
+        </p>
+      </div>
+
+      <div>
+        <h4>System Implementation</h4>
+        <p>
+          This web application demonstrates the same concept using a
+          browser-based microphone. Audio is analyzed using an AI bird sound
+          classification model inspired by the BirdNET deep learning framework.
+          Only the most confident species per recording is stored in a
+          cloud-hosted PostgreSQL database (Supabase) and used to visualize
+          detection history, biodiversity trends, and ecosystem health.
+        </p>
+      </div>
+    </div>
+
+    <p class="footer-meta">
+      AI Model: BirdNET-inspired CNN &nbsp;•&nbsp;
+      Backend: Supabase (PostgreSQL) &nbsp;•&nbsp;
+      Frontend: Web Audio API + Chart.js
+    </p>
+  </div>
+</footer>
+</body>
+</html>
