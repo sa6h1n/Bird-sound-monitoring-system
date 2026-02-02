@@ -623,3 +623,39 @@ window.addEventListener("DOMContentLoaded", () => {
   );
   showHistory("week", weekBtn);
 });
+async function downloadCSV() {
+  const range = currentHistoryRange || "week";
+  const data = await fetchDetections(range);
+
+  if (!data.length) {
+    alert("No data available to export.");
+    return;
+  }
+
+  // Convert to CSV
+  const headers = ["bird", "confidence", "detected_at", "range"];
+  const rows = data.map(d => [
+    `"${d.bird}"`,
+    d.confidence,
+    `"${new Intl.DateTimeFormat("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Kolkata"
+    }).format(new Date(d.created_at))}"`,
+    range
+  ]);
+
+  let csv = headers.join(",") + "\n";
+  rows.forEach(r => (csv += r.join(",") + "\n"));
+
+  // Trigger download
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `bird_detections_${range}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
