@@ -39,10 +39,10 @@
     Multiple predictions may occur, but only the dominant species is stored.
   </p>
     <div class="history-controls">
-      <button onclick="showHistory('day')">Today</button>
-      <button onclick="showHistory('week')">Last 7 Days</button>
-      <button onclick="showHistory('month')">Last 30 Days</button>
-      <button class="danger" onclick="clearHistory()">Clear All</button>
+    <button onclick="showHistory('day', this)">Today</button>
+<button onclick="showHistory('week', this)">Last 7 Days</button>
+<button onclick="showHistory('month', this)">Last 30 Days</button>
+<button class="danger" onclick="clearHistory()">Clear All</button>
     </div>
 
     <div id="historyResults" class="history-results">
