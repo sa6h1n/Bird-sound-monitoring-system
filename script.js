@@ -318,12 +318,20 @@ async function saveDetections(predictions) {
   }
 }
 
-async function fetchDetections(range = "week") {
+async function fetchDetections(range = "day") {
   let fromDate = new Date();
 
-  if (range === "day") fromDate.setDate(fromDate.getDate() - 1);
-  if (range === "week") fromDate.setDate(fromDate.getDate() - 7);
-  if (range === "month") fromDate.setDate(fromDate.getDate() - 30);
+  if (range === "day") {
+    fromDate.setHours(0, 0, 0, 0); // TODAY only
+  }
+
+  if (range === "week") {
+    fromDate.setDate(fromDate.getDate() - 7);
+  }
+
+  if (range === "month") {
+    fromDate.setDate(fromDate.getDate() - 30);
+  }
 
   const { data, error } = await supabaseClient
     .from("detections")
@@ -336,12 +344,18 @@ async function fetchDetections(range = "week") {
     return [];
   }
 
-  console.log("FETCH OK:", data);
   return data;
 }
 
-async function showHistory(range = currentHistoryRange) {
+async function showHistory(range = "week", btn = null) {
   currentHistoryRange = range;
+
+  // ✅ Update active button
+  document
+    .querySelectorAll(".history-controls button")
+    .forEach(b => b.classList.remove("active"));
+
+  if (btn) btn.classList.add("active");
 
   const historyResults = document.getElementById("historyResults");
   historyResults.innerHTML = "<p>Loading...</p>";
@@ -359,47 +373,34 @@ async function showHistory(range = currentHistoryRange) {
   historyResults.innerHTML = "";
 
   const birdMap = {};
-
-  // Build aggregation
   history.forEach(item => {
     if (!birdMap[item.bird]) {
-      birdMap[item.bird] = {
-        count: 0,
-        lastSeen: item.created_at
-      };
+      birdMap[item.bird] = { count: 0, lastSeen: item.created_at };
     }
-
     birdMap[item.bird].count++;
-
     if (new Date(item.created_at) > new Date(birdMap[item.bird].lastSeen)) {
       birdMap[item.bird].lastSeen = item.created_at;
     }
   });
 
-  // ✅ RENDER HISTORY ITEMS
- Object.entries(birdMap).forEach(([bird, data]) => {
+  Object.entries(birdMap).forEach(([bird, data]) => {
+    const utcDate = new Date(data.lastSeen + "Z");
+    const formatted = new Intl.DateTimeFormat("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Kolkata"
+    }).format(utcDate);
 
-  // 🔑 FORCE UTC INTERPRETATION
-  const utcDate = new Date(data.lastSeen + "Z");
+    const div = document.createElement("div");
+    div.className = "history-item";
+    div.innerHTML = `
+      <strong>${bird}</strong>
+      <span>Detected ${data.count} ${data.count === 1 ? "time" : "times"}</span>
+      <div class="history-time">Last detected: ${formatted} (IST)</div>
+    `;
+    historyResults.appendChild(div);
+  });
 
-  const formatted = new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata"
-  }).format(utcDate);
-
-  const div = document.createElement("div");
-  div.className = "history-item";
-  div.innerHTML = `
-    <strong>${bird}</strong>
-    <span>Detected ${data.count} ${data.count === 1 ? "time" : "times"}</span>
-    <div class="history-time">Last detected: ${formatted} (IST)</div>
-  `;
-
-  historyResults.appendChild(div);
-});
-
-  // ✅ UPDATE ANALYTICS
   renderCharts(history);
   renderBiodiversityTrend(history);
   updateBiodiversityScore(history);
@@ -597,5 +598,8 @@ function renderBiodiversityTrend(filteredHistory = []) {
   });
 }
 window.addEventListener("DOMContentLoaded", () => {
-  showHistory("week"); // default view on refresh
+  const weekBtn = document.querySelector(
+    ".history-controls button:nth-child(2)"
+  );
+  showHistory("week", weekBtn);
 });
