@@ -16,7 +16,6 @@ body {
   overflow-x: hidden;
 }
 
-
 body {
     font-family: "IBM Plex Sans", system-ui, sans-serif;
   font-weight: 400;
@@ -198,7 +197,33 @@ canvas#waveform {
   color: white;
   border: none;
 }
+.history-controls button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #e5e7eb;
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
 
+.history-controls button:hover {
+  background: #334155;
+}
+
+/* ✅ ACTIVE STATE */
+.history-controls button.active {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #022c22;
+  font-weight: 600;
+  box-shadow: 0 0 0 2px rgba(34,197,94,0.25);
+}
+
+/* Clear button stays red */
+.history-controls .danger {
+  background: #7f1d1d;
+}
 .history-controls button:hover {
   background: #334155;
 }
@@ -217,6 +242,7 @@ canvas#waveform {
   border-radius: 10px;
   margin-bottom: 10px;
 }
+
 
 .analytics {
   background: #0b1220;
