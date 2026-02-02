@@ -201,7 +201,6 @@ recorder.onstop = async () => {
 
     // Refresh history & analytics
   updateBiodiversityScore([]);
-<<<<<<< HEAD
 // 🔁 Auto-switch to Today after a new recording
 currentHistoryRange = "day";
 
@@ -210,9 +209,6 @@ const todayBtn = document.querySelector(
 );
 
 await showHistory("day", todayBtn);
-=======
-await showHistory(currentHistoryRange);
->>>>>>> 8f2891c611d6e6097d21d1699aa61108efbb9baa
 
     // ✅ THIS WAS MISSING
     resetControls();
@@ -257,7 +253,6 @@ function getTopPrediction(predictions) {
     return current.confidence > top.confidence ? current : top;
   });
 }
-<<<<<<< HEAD
 function updateChartRangeLabel(range) {
   const el = document.getElementById("chartRangeLabel");
   if (!el) return;
@@ -270,8 +265,6 @@ function updateChartRangeLabel(range) {
 
   el.textContent = `Showing: ${map[range] || "Last 7 Days"}`;
 }
-=======
->>>>>>> 8f2891c611d6e6097d21d1699aa61108efbb9baa
 /* ------------------ Render Results ------------------ */
 async function renderResults(predictions) {
   resultsEl.innerHTML = "";
@@ -375,10 +368,7 @@ async function fetchDetections(range = "day") {
 
 async function showHistory(range = "week", btn = null) {
   currentHistoryRange = range;
-<<<<<<< HEAD
   updateChartRangeLabel(range);
-=======
->>>>>>> 8f2891c611d6e6097d21d1699aa61108efbb9baa
 
   // ✅ Update active button
   document
@@ -632,8 +622,4 @@ window.addEventListener("DOMContentLoaded", () => {
     ".history-controls button:nth-child(2)"
   );
   showHistory("week", weekBtn);
-<<<<<<< HEAD
 });
-=======
-});
->>>>>>> 8f2891c611d6e6097d21d1699aa61108efbb9baa
