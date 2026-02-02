@@ -42,13 +42,13 @@
   <button data-range="day" onclick="showHistory('day', this)">Today</button>
   <button data-range="week" onclick="showHistory('week', this)">Last 7 Days</button>
   <button data-range="month" onclick="showHistory('month', this)">Last 30 Days</button>
+  <button class="download" onclick="downloadCSV()">⬇ Download CSV</button>
   <button class="danger" onclick="clearHistory()">Clear All</button>
 </div>
 
     <div id="historyResults" class="history-results">
       <p>No history yet.</p>
     </div>
-    <button class="download" onclick="downloadCSV()">⬇ Download CSV</button>
   </section>
 
   <section class="analytics">
