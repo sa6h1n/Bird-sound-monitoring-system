@@ -157,7 +157,7 @@ recordBtn.onclick = async () => {
   recorder.start();
   drawWave();
 
-  timeLeft = 10;
+  timeLeft = 20;
   timerEl.textContent = `${timeLeft}s`;
 
  countdownInterval = setInterval(() => {
@@ -210,7 +210,6 @@ const todayBtn = document.querySelector(
 
 await showHistory("day", todayBtn);
 
-    // ✅ THIS WAS MISSING
     resetControls();
 
   } catch (err) {
@@ -242,7 +241,7 @@ function resetControls() {
   recordBtn.disabled = false;
   stopBtn.disabled = true;
   statusEl.textContent = "Ready";
-  timerEl.textContent = "10 s";
+  timerEl.textContent = "20s";
 }
 /* ================== HELPERS ================== */
 
